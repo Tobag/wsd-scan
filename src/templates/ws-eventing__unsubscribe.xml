@@ -1,0 +1,21 @@
+<soap:Envelope
+        xmlns:soap="http://www.w3.org/2003/05/soap-envelope"
+        xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing"
+        xmlns:wse="http://schemas.xmlsoap.org/ws/2004/08/eventing"
+>
+    <soap:Header>
+        <wsa:From>
+            <wsa:Address>{{FROM}}</wsa:Address>
+        </wsa:From>
+        <wsa:To>{{TO}}</wsa:To>
+        <wsa:Action>http://schemas.xmlsoap.org/ws/2004/08/eventing/Unsubscribe</wsa:Action>
+        <wsa:MessageID>{{MSG_ID}}</wsa:MessageID>
+        <wsa:ReplyTo>
+            <wsa:Address>http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous</wsa:Address>
+        </wsa:ReplyTo>
+        <wse:Identifier>{{SUBSCRIPTION_ID}}</wse:Identifier>
+    </soap:Header>
+    <soap:Body>
+        <wse:Unsubscribe/>
+    </soap:Body>
+</soap:Envelope>

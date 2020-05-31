@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='ASCII'?>
+<s:Envelope xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing"
+            xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery"
+            xmlns:i="http://printer.example.org/2003/imaging"
+            xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+    <s:Header>
+        <a:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</a:Action>
+        <a:MessageID>{{MSG_ID}}</a:MessageID>
+        <a:From>
+            <a:Address>{{FROM}}</a:Address>
+        </a:From>
+        <a:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</a:To>
+        <a:ReplyTo>{{FROM}}</a:ReplyTo>
+    </s:Header>
+    <s:Body>
+        <d:Probe>
+        </d:Probe>
+    </s:Body>
+</s:Envelope>
+

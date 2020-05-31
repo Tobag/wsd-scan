@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"
+               xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing"
+               xmlns:wsd="http://schemas.xmlsoap.org/ws/2005/04/discovery">
+    <soap:Header>
+        <wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Resolve</wsa:Action>
+        <wsa:From>
+            <wsa:Address>{{FROM}}</wsa:Address>
+        </wsa:From>
+        <wsa:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</wsa:To>
+        <wsa:MessageID>{{MSG_ID}}</wsa:MessageID>
+        <wsa:ReplyTo>{{FROM}}</wsa:ReplyTo>
+    </soap:Header>
+    <soap:Body>
+        <wsd:Resolve>
+            <wsa:EndpointReference>
+                <wsa:Address>{{EP_ADDR}}</wsa:Address>
+            </wsa:EndpointReference>
+        </wsd:Resolve>
+    </soap:Body>
+</soap:Envelope>

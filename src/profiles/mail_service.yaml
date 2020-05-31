@@ -1,0 +1,6 @@
+to: mymail@gmail.com
+sender: mymail@gmail.com
+smtp:
+  user: smptuser
+  password: smtppass
+  server: smptpserv
