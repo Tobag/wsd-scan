@@ -1,3 +1,5 @@
+import threading
+import time
 import argparse
 import yaml
 
@@ -40,26 +42,40 @@ def start(args):
 
     wsd_globals.scan_profiles = read_profiles_from_yaml()
 
+    start_server_thread()
+
     for hosted_service in hosted_services:
         if "wscn:ScannerServiceType" in hosted_service.types:
             listen_addr = "http://"+args.self+":6666/wsd"
 
-            for profile in wsd_globals.scan_profiles:
-                client_context = profile["id"]
-                wsd_scan__events.wsd_scanner_all_events_subscribe(hosted_service, listen_addr)
-                _, dest_token = wsd_scan__events.wsd_scan_available_event_subscribe(hosted_service,
-                                                                       profile["name"],
-                                                                       client_context,
-                                                                       listen_addr)
-                if dest_token is not None:
-                    wsd_scan__events.profile_map[client_context] = profile
-                    wsd_scan__events.token_map[client_context] = dest_token
-                    wsd_scan__events.host_map[client_context] = hosted_service
+            while True:
+                print("Pushing profiles to device...")
+                for profile in wsd_globals.scan_profiles:
+                    client_context = profile["id"]
+                    wsd_scan__events.wsd_scanner_all_events_subscribe(hosted_service, listen_addr)
+                    _, dest_token = wsd_scan__events.wsd_scan_available_event_subscribe(hosted_service,
+                                                                           profile["name"],
+                                                                           client_context,
+                                                                           listen_addr)
+                    if dest_token is not None:
+                        wsd_scan__events.profile_map[client_context] = profile
+                        wsd_scan__events.token_map[client_context] = dest_token
+                        wsd_scan__events.host_map[client_context] = hosted_service
 
-            break
+                # Refresh profiles every 60 seconds
+                time.sleep(60)
 
+
+def start_server_thread():
+    t = threading.Thread(target=start_server)
+    t.start()
+
+
+def start_server():
+    print("Starting server...")
     server = wsd_scan__events.HTTPServerWithContext(('', 6666), wsd_scan__events.RequestHandler, "context")
     server.serve_forever()
+
 
 def main():
     help_filter = "Help..."

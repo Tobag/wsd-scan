@@ -234,7 +234,7 @@ def wsd_get_job_history(hosted_scan_service: wsd_transfer__structures.HostedServ
 def wsd_retrieve_image(hosted_scan_service: wsd_transfer__structures.HostedService,
                        job: wsd_scan__structures.ScanJob,
                        docname: str) \
-        -> typing.Tuple[int, typing.List[Image.Image]]:
+        -> Image.Image:
     """
     Submit a RetrieveImage request, and parse the response.
     Retrieves a single image from the scanner, if the job has available images to send. If the file format
@@ -271,7 +271,7 @@ def wsd_retrieve_image(hosted_scan_service: wsd_transfer__structures.HostedServi
         if q is not None:
             e = wsd_common.xml_find(q, ".//soap:Code/soap:Subcode/soap:Value").text
             if e == "wscn:ClientErrorNoImagesAvailable":
-                return 0, []
+                return Image.NONE
     except etree.ParseError:
         boundaryValue = ""
         msgHeaders = r.headers['Content-Type'].split(";")
@@ -295,82 +295,5 @@ def wsd_retrieve_image(hosted_scan_service: wsd_transfer__structures.HostedServi
         img = Image.open(BytesIO(ls[2].get_payload(decode=True)))
         print("%s %s %s" % (img.format, img.size, img.mode))
 
-        count = 0
-        imglist = []
+        return img
 
-        for page in ImageSequence.Iterator(img):
-            count += 1
-            a = Image.new(page.mode, page.size)
-            a.putdata(page.getdata())
-            a.format = img.format
-            imglist.append(a)
-
-        return count, imglist
-
-
-def __demo():
-#    wsd_common.init()
-
-    tsl = wsd_discovery__operations.get_devices()
-    for device in tsl:
-        (targetInfo, hostedServices) = wsd_transfer__operations.wsd_get(device)
-        for hostedService in hostedServices:
-            if "wscn:ScannerServiceType" in hostedService.types:
-                (scannerDescription, scannerConfiguration, scannerStatus, std_ticket) = wsd_get_scanner_elements(hostedService)
-                print(device.xaddrs)
-                print(targetInfo)
-                print(hostedService)
-                print(scannerDescription)
-                print(scannerConfiguration)
-                print(scannerStatus)
-                print(std_ticket)
-                # t.doc_params.input_src = "ADF"
-                # t.doc_params.images_num = 0
-
-                std_ticket.doc_params.input_size = 8500, 11000
-                std_ticket.doc_params.front.size = 8500, 11000
-                std_ticket.doc_params.size_autodetect = False
-                std_ticket.doc_params.auto_exposure = True
-
-                (valid, ticket) = wsd_validate_scan_ticket(hostedService, std_ticket)
-                if valid:
-                    print("####\nTicket was validated. Starting Job now...\n####")
-                    j = wsd_create_scan_job(hostedService, ticket)
-                    print(j)
-                    (jobStatus, ticket2, docParams, docList) = wsd_get_job_elements(hostedService, j)
-
-                    print("JobStatus:\n")
-                    print(jobStatus)
-                    print("\n\n")
-
-                    print("Ticket:\n")
-                    print(ticket2)
-                    print("\n\n")
-
-                    print("Document Params:\n")
-                    print(docParams)
-                    print("\n\n")
-
-                    print("Document List:\n")
-                    print(docList)
-                    print("\n\n")
-
-                    jobs = wsd_get_active_jobs(hostedService)
-                    for i in jobs:
-                        print(i)
-                    jobs = wsd_get_job_history(hostedService)
-                    for i in jobs:
-                        print(i)
-                    o = 0
-                    while o < ticket.doc_params.images_num:
-                        imgnum, imglist = wsd_retrieve_image(hostedService, j, "prova.bmp")
-                        for i in imglist:
-                            i.save("prova_%d.bmp" % o, "BMP")
-                            o += 1
-
-
-if __name__ == "__main__":
-    import wsd_discovery__operations
-    import wsd_transfer__operations
-    import wsd_discovery__parsers
-    __demo()

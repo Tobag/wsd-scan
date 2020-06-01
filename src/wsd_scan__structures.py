@@ -151,25 +151,31 @@ class ScanTicket:
         s += wsd_common.indent(str(self.doc_params))
         return s
 
-    def override_params(self, params):
-        if params.input_size is not None:
-            self.doc_params.input_size = params.input_size
-        if "color" in params.front:
-            self.doc_params.front.color = params.front["color"]
-        if "size" in params.front:
-            self.doc_params.front.size = params.front["size"]
-        if "res" in params.front:
-            self.doc_params.front.res = params.front["res"]
-        if params.input_size is not None:
-            self.doc_params.input_size = params.input_size
-        if params.format is not None:
-            self.doc_params.format = params.format
-        if params.input_src is not None:
-            self.doc_params.input_src = params.input_src
-        if params.compression_factor is not None:
-            self.doc_params.compression_factor = params.compression_factor
-        if params.images_num is not None:
-            self.doc_params.images_num = params.images_num
+    def override_params(self, profile):
+        if profile["paper_size"] == "A4":
+            self.doc_params.input_size = 8267, 11693
+            self.doc_params.front.size = 8267, 11693
+        elif profile["paper_size"] == "A5":
+            self.doc_params.input_size = 5847, 8267
+            self.doc_params.front.size = 5847, 8267
+        elif profile["paper_size"] == "Letter":
+            self.doc_params.input_size = 8500, 11000
+            self.doc_params.front.size = 8500, 11000
+
+        if "color" in profile:
+            self.doc_params.front.color = profile["color"]
+
+        self.doc_params.front.res = profile["resolution"], profile["resolution"]
+
+        if "format" in profile:
+            self.doc_params.format = profile["format"]
+        else:
+            self.doc_params.format = "tiff-single-uncompressed"
+
+        self.doc_params.input_src = profile["input_src"]
+
+        self.doc_params.compression_factor = 100
+        self.doc_params.images_num = 1
 
 
     def as_map(self):

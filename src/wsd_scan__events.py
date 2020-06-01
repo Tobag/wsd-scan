@@ -5,21 +5,21 @@ import copy
 import http.server
 import queue
 import threading
-import time
 import typing
 from datetime import datetime, timedelta
 
 import img2pdf as img2pdf
 import lxml.etree as etree
+from PIL import Image
 
 import mail_service
-import wsd_common, \
-    wsd_transfer__structures, \
-    wsd_eventing__operations, \
-    wsd_scan__operations, \
-    wsd_scan__parsers, \
-    xml_helpers, \
-    wsd_globals
+import wsd_common
+import wsd_eventing__operations
+import wsd_globals
+import wsd_scan__operations
+import wsd_scan__parsers
+import wsd_transfer__structures
+import xml_helpers
 
 token_map = {}
 host_map = {}
@@ -306,7 +306,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         t = threading.Thread(target=device_initiated_scan_worker,
                              args=(client_context,
                                    scan_identifier,
-                                   "scan-"+datetime.now().strftime("%Y-%m-%d_%H_%M_%S")))
+                                   "scan-" + datetime.now().strftime("%Y-%m-%d_%H_%M_%S")))
         t.start()
 
     @staticmethod
@@ -559,7 +559,13 @@ def device_initiated_scan_worker(client_context: str,
     profile = profile_map[client_context]
     description, config, status, std_ticket = wsd_scan__operations.wsd_get_scanner_elements(host)
 
-    std_ticket.override_params(profile["params"])
+    std_ticket.override_params(profile)
+
+    platen_fallback = False
+    # for auto input we try ADF first and use Platen as a fallback
+    if std_ticket.doc_params.input_src == "Auto":
+        std_ticket.doc_params.input_src = "ADF"
+        platen_fallback = True
 
     save_format = profile["image_format"]
 
@@ -570,66 +576,35 @@ def device_initiated_scan_worker(client_context: str,
 
     while more_images_available:
         job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
+        img = wsd_scan__operations.wsd_retrieve_image(host, job, file_name)
 
-        for j in range(0, std_ticket.doc_params.images_num):
-            imgnum, imglist = wsd_scan__operations.wsd_retrieve_image(host, job, file_name)
-            if imgnum == 0:
+        if img == Image.NONE:
+            if platen_fallback:
+                std_ticket.doc_params.input_src = "Platen"
+                continue
+            else:
                 more_images_available = False
                 break
 
-            for i in imglist:
-                picture_file = "./scans/%s_%d.%s" % (file_name, image_id, save_format)
-                i.save(picture_file, format=save_format, quality=profile["quality"])
-                picture_files.append(picture_file)
-                image_id += 1
+        picture_file = "%s/%s_%d.%s" % (profile["target_folder"], file_name, image_id, save_format)
+        img.save(picture_file, format=save_format, quality=profile["quality"])
+        picture_files.append(picture_file)
+        image_id += 1
 
-        ## Only check for more images if the ADF is used
-        if std_ticket.doc_params.input_src == "Platen":
+        # Try again with platen only once
+        if platen_fallback:
+            platen_fallback = False
+        # Only check for more images if the ADF is used
+        elif std_ticket.doc_params.input_src == "Platen":
             more_images_available = False
 
-    pdf_file_name = "./scans/%s.pdf" % file_name
-    with open(pdf_file_name, "wb") as f:
-        f.write(img2pdf.convert(picture_files))
+    if profile["use_pdf"]:
+        pdf_file_name = "%s/%s.pdf" % (profile["target_folder"], file_name)
+        with open(pdf_file_name, "wb") as f:
+            f.write(img2pdf.convert(picture_files))
+        attachments = [pdf_file_name]
+    else:
+        attachments = picture_files
 
-    mail_service.MailService().sendMaiWithScannedDocument(pdf_file_name)
-
-
-def __demo_simple_listener():
-    import wsd_discovery__operations
-    import wsd_transfer__operations
-    import wsd_discovery__parsers
-    tsl = wsd_discovery__operations.get_devices()
-    (ti, hss) = wsd_transfer__operations.wsd_get(list(tsl)[0])
-    for b in hss:
-        if "wscn:ScannerServiceType" in b.types:
-            listen_addr = "http://192.168.0.157:6666/wsd"
-            wsd_scanner_all_events_subscribe(b, listen_addr)
-            (xxx, dest_token) = wsd_scan_available_event_subscribe(b,
-                                                                   "PROVA_PYTHON",
-                                                                   "python_client",
-                                                                   listen_addr)
-            if dest_token is not None:
-                token_map["python_client"] = dest_token
-                host_map["python_client"] = b
-            break
-
-    server = HTTPServerWithContext(('', 6666), RequestHandler, "context")
-    wsd_globals.debug = True
-    server.serve_forever()
-
-
-def __demo_monitor():
-    import wsd_discovery__operations
-    import wsd_transfer__operations
-    import wsd_discovery__parsers
-    tsl = wsd_discovery__operations.get_devices()
-    (ti, hss) = wsd_transfer__operations.wsd_get(list(tsl)[0])
-    for b in hss:
-        if "wscn:ScannerServiceType" in b.types:
-            listen_addr = "http://192.168.0.80:8018/wsd"
-            m = WSDScannerMonitor(b, listen_addr, 6666)
-            while True:
-                time.sleep(10)
-                print(m.get_scanner_status())
-                print(m.get_scanner_configuration())
-
+    if profile["send_email"]:
+        mail_service.MailService().sendMaiWithScannedDocuments(attachments)

@@ -142,28 +142,3 @@ def wsd_get_status(hosted_service: wsd_transfer__structures.HostedService,
     e = wsd_common.xml_find(x, ".//wse:Expires")
     return xml_helpers.parse_xml_datetime(e.text.replace(" ", ""), weak=True) if e is not None else None
 
-
-def __demo():
-    import wsd_scan__events
-    import wsd_transfer__operations
-    import wsd_discovery__operations
-    import wsd_discovery__parsers
-
-    tsl = wsd_discovery__operations.get_devices()
-    for a in tsl:
-        res = wsd_transfer__operations.wsd_get(a)
-        if res is not False:
-            (ti, hostedServices) = res
-            for hostedService in hostedServices:
-                if "wscn:ScannerServiceType" in hostedService.types:
-                    listen_addr = hostedService.ep_ref_addr.replace("/scan", "")
-                    h = wsd_scan__events.wsd_scanner_all_events_subscribe(hostedService,
-                                                                          listen_addr,
-                                                                          datetime.now() + timedelta(days=2))
-                    # wsd_renew(b, h)
-                    print(wsd_get_status(hostedService, h))
-                    wsd_unsubscribe(hostedService, h)
-
-
-if __name__ == "__main__":
-    __demo()

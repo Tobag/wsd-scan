@@ -1,0 +1,22 @@
+# id is used as the client_context and has to be unique
+id: jpeg_scan
+# display name that will be shown on the printer
+name: Farbe Jpeg
+# color to use e.g. RGB24, Grayscale8, BlackAndWhite1
+color: RGB24
+# the image format which will be used
+image_format: jpeg
+# quality of the image (0-100)
+quality: 70
+# the folder where the images are stored
+target_folder: ./scans
+# send the scanned document to an email address
+send_email: True
+# wrap the scanned image(s) in a pdf file
+use_pdf: False
+# paper size - valid values are: A4, A5, Letter
+paper_size: A4
+# resolution (dpi)
+resolution: 200
+# input source - valiod values are: Auto, ADF, Platen
+input_src: Auto

@@ -7,11 +7,12 @@ from email.mime.text import MIMEText
 
 import yaml
 
+
 class MailService:
     def __init__(self):
         return
 
-    def sendMaiWithScannedDocument(self, filename):
+    def sendMaiWithScannedDocuments(self, attachments):
         with open("./profiles/mail_service.yaml") as yaml_file:
             yaml_object = yaml.load(yaml_file, Loader=yaml.FullLoader)
             yaml_file.close()
@@ -30,24 +31,9 @@ class MailService:
         # Add body to email
         message.attach(MIMEText(body, "plain"))
 
-        # Open PDF file in binary mode
-        with open(filename, "rb") as attachment:
-            # Add file as application/octet-stream
-            # Email client can usually download this automatically as attachment
-            part = MIMEBase("application", "octet-stream")
-            part.set_payload(attachment.read())
+        for attachment in attachments:
+            self.attach_file(message, attachment)
 
-        # Encode file in ASCII characters to send by email
-        encoders.encode_base64(part)
-
-        # Add header as key/value pair to attachment part
-        part.add_header(
-            "Content-Disposition",
-            f"attachment; filename= {filename}",
-        )
-
-        # Add attachment to message and convert message to string
-        message.attach(part)
         text = message.as_string()
 
         # Log in to server using secure context and send email
@@ -55,3 +41,20 @@ class MailService:
         with smtplib.SMTP_SSL(yaml_object["smtp"]["server"], 465, context=context) as server:
             server.login(yaml_object["smtp"]["user"], yaml_object["smtp"]["password"])
             server.sendmail(sender_email, receiver_email, text)
+
+    def attach_file(self, message, filename):
+        # Open PDF file in binary mode
+        with open(filename, "rb") as attachment:
+            # Add file as application/octet-stream
+            # Email client can usually download this automatically as attachment
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment.read())
+        # Encode file in ASCII characters to send by email
+        encoders.encode_base64(part)
+        # Add header as key/value pair to attachment part
+        part.add_header(
+            "Content-Disposition",
+            "attachment; filename=%s" % filename,
+        )
+        # Add attachment to message and convert message to string
+        message.attach(part)
