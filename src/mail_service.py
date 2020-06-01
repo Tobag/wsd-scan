@@ -17,8 +17,8 @@ class MailService:
             yaml_object = yaml.load(yaml_file, Loader=yaml.FullLoader)
             yaml_file.close()
 
-        subject = "You scanned document"
-        body = "You scanned document be attached to this email."
+        subject = "Your scanned document"
+        body = "Your scanned document is attached to this mail."
         sender_email = yaml_object["sender"]
         receiver_email = yaml_object["to"]
 
