@@ -6,6 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import yaml
+import ntpath
 
 
 class MailService:
@@ -42,9 +43,9 @@ class MailService:
             server.login(yaml_object["smtp"]["user"], yaml_object["smtp"]["password"])
             server.sendmail(sender_email, receiver_email, text)
 
-    def attach_file(self, message, filename):
+    def attach_file(self, message, filepath):
         # Open PDF file in binary mode
-        with open(filename, "rb") as attachment:
+        with open(filepath, "rb") as attachment:
             # Add file as application/octet-stream
             # Email client can usually download this automatically as attachment
             part = MIMEBase("application", "octet-stream")
@@ -54,7 +55,7 @@ class MailService:
         # Add header as key/value pair to attachment part
         part.add_header(
             "Content-Disposition",
-            "attachment; filename=%s" % filename,
+            "attachment; filename=%s" % ntpath.basename(filepath),
         )
         # Add attachment to message and convert message to string
         message.attach(part)
