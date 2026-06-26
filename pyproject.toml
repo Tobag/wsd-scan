@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wsd-scan"
+version = "0.1.0"
+description = "WSD push-scan receiver for Linux — device-initiated scanning via WS-Scan / DPWS"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.6"
+dependencies = [
+    "lxml",
+    "requests",
+    "python-dateutil",
+    "PyYAML",
+    "Pillow",
+    "img2pdf",
+    "secure-smtplib",
+]
+
+[project.scripts]
+wsd-scan = "wsd_scan.cli:main"
+
+[tool.setuptools]
+packages = ["wsd_scan"]
+
+[tool.setuptools.package-data]
+wsd_scan = ["templates/*.xml", "profiles/*.yaml"]

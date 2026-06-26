@@ -7,3 +7,4 @@ src/scans/*.jpg
 src/scans/*.png
 src/scans/*.pdf
 src/scans/*.tiff
+wsd_scan.egg-info/

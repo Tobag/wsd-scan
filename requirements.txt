@@ -1,0 +1,7 @@
+lxml
+requests
+python-dateutil
+PyYAML
+Pillow
+img2pdf
+secure-smtplib

@@ -34,44 +34,59 @@ Key WSD concepts: WS-Discovery (UDP multicast device discovery), WS-Transfer (Ge
 ## File Map
 
 ```
-src/
-  wsd-scan.py              — CLI entry point (argparse: start -t TARGET -s SELF_IP)
-  wsd_scan__events.py      — HTTP listener, event handlers, device_initiated_scan_worker, subscription logic
-  wsd_scan__operations.py  — WS-Scan operations: GetScannerElements, CreateScanJob, RetrieveImage, ValidateScanTicket
-  wsd_scan__parsers.py     — XML response parsers for scanner elements, tickets, job status
-  wsd_scan__structures.py  — Data classes: ScanTicket, DocumentParams, ScanJob, MediaSide, etc.
-                             ScanTicket.override_params() applies YAML profile to default ticket
-  wsd_common.py            — SOAP/HTTP transport, XML helpers, namespace map, template loading
-  wsd_globals.py           — Global state: URN, debug flag, message dedup ring buffer, scan_profiles
-  wsd_discovery__operations.py — WS-Discovery (Probe/Resolve over UDP multicast)
-  wsd_discovery__parsers.py    — Discovery response parsers
-  wsd_discovery__structures.py — Discovery data structures
-  wsd_transfer__operations.py  — WS-Transfer (Get metadata from device)
-  wsd_transfer__structures.py  — HostedService, ThisDevice, ThisModel metadata classes
-  wsd_eventing__operations.py  — WS-Eventing (Subscribe/Unsubscribe/Renew)
-  xml_helpers.py               — DateTime/duration XML formatting
-  mail_service.py              — SMTP email delivery for scanned documents
+wsd_scan/                        — Python package (pip-installable)
+  __init__.py                    — Package marker
+  __main__.py                    — Enables `python -m wsd_scan`
+  cli.py                         — CLI entry point (argparse: start -t TARGET -s SELF_IP)
+  wsd_scan__events.py            — HTTP listener, event handlers, device_initiated_scan_worker, subscription logic
+  wsd_scan__operations.py        — WS-Scan operations: GetScannerElements, CreateScanJob, RetrieveImage, ValidateScanTicket
+  wsd_scan__parsers.py           — XML response parsers for scanner elements, tickets, job status
+  wsd_scan__structures.py        — Data classes: ScanTicket, DocumentParams, ScanJob, MediaSide, etc.
+                                   ScanTicket.override_params() applies YAML profile to default ticket
+  wsd_common.py                  — SOAP/HTTP transport, XML helpers, namespace map, template loading
+  wsd_globals.py                 — Global state: URN, debug flag, message dedup ring buffer, scan_profiles
+  wsd_discovery__operations.py   — WS-Discovery (Probe/Resolve over UDP multicast)
+  wsd_discovery__parsers.py      — Discovery response parsers
+  wsd_discovery__structures.py   — Discovery data structures
+  wsd_transfer__operations.py    — WS-Transfer (Get metadata from device)
+  wsd_transfer__structures.py    — HostedService, ThisDevice, ThisModel metadata classes
+  wsd_eventing__operations.py    — WS-Eventing (Subscribe/Unsubscribe/Renew)
+  xml_helpers.py                 — DateTime/duration XML formatting
+  mail_service.py                — SMTP email delivery for scanned documents
   profiles/
-    scan_profile_*.yaml        — Scan profiles (LQ, HQ, grayscale, JPEG): color, format, quality, resolution, input_src, paper_size
-    mail_service.yaml          — SMTP credentials (sender, recipient, server, user, password)
-  templates/                   — 17 XML SOAP request templates (ws-scan__*, ws-eventing__*, ws-discovery__*, ws-transfer__*)
-  scans/.ignore                — Placeholder for scan output directory
-Dockerfile                    — Docker image (python:3.8.2-slim, exposes 6666)
-start_script.sh               — Interactive Docker entrypoint
+    scan_profile_*.yaml          — Scan profiles (LQ, HQ, grayscale, JPEG): color, format, quality, resolution, input_src, paper_size
+    mail_service.yaml            — SMTP credentials (sender, recipient, server, user, password)
+  templates/                     — 17 XML SOAP request templates (ws-scan__*, ws-eventing__*, ws-discovery__*, ws-transfer__*)
+tests/                           — Development test scripts (probe_device, test_discovery, test_subscribe, test_e2e, test_pkg)
+scans/.gitignore                 — Scan output directory (created at runtime)
+pyproject.toml                   — Package metadata, entry point: wsd-scan = wsd_scan.cli:main
+requirements.txt                 — Pinned dependencies
+Dockerfile                       — Docker image (python:3.11-slim, exposes 6666)
+start_script.sh                  — Interactive Docker entrypoint
 ```
 
 ## Tech Stack
 
-- Python 3.6+ (Dockerfile pins 3.8.2)
-- Dependencies: argparse, python-dateutil, uuid, lxml, requests, urllib3, PyYAML, Pillow (PIL), img2pdf, secure-smtplib
-- No setup.py, no requirements.txt (deps listed in README and Dockerfile only)
-- No tests, no CI, no linting configured
+- Python 3.6+ (Dockerfile pins 3.11)
+- Dependencies: python-dateutil, lxml, requests, PyYAML, Pillow (PIL), img2pdf, secure-smtplib
+- Packaged as a pip-installable package via pyproject.toml (setuptools)
+- Entry point: `wsd-scan` console script (wsd_scan.cli:main)
+- Also runnable as `python -m wsd_scan`
 
 ## Commands
 
 ```bash
-# Run directly (from src/ directory — flat imports require CWD to be src/)
-cd src && python wsd-scan.py start -t http://192.168.0.149:8018/wsd -s 192.168.0.116
+# Install (editable, from repo root)
+pip install -e .
+
+# Run (installed as console script)
+wsd-scan start -t http://192.168.0.149:8018/wsd -s 192.168.0.110
+
+# Run (as module)
+python -m wsd_scan start -t http://192.168.0.149:8018/wsd -s 192.168.0.110
+
+# Run with debug
+wsd-scan start -t http://192.168.0.149:8018/wsd -s 192.168.0.110 -d
 
 # Docker
 docker build -t wsd-scan .
@@ -82,16 +97,14 @@ The `-t` flag is the WSD endpoint URL of the scanner. The `-s` flag is the local
 
 ## Known Issues and Technical Debt
 
-- Flat imports: all modules use `import wsd_common` instead of `from package import wsd_common`. Scripts must run from src/ directory. No pip-installable package.
-- No setup.py, no requirements.txt, no pyproject.toml.
-- Port 6666 hardcoded in wsd-scan.py and wsd_scan__events.py.
-- Subscription refresh loop re-pushes all profiles every 60 seconds unconditionally (time.sleep(60) in start()).
+- Port 6666 hardcoded in cli.py and wsd_scan__events.py.
+- Subscription refresh: subscribes once and waits. No WS-Eventing Renew before 1-hour expiry (TODO in cli.py).
 - wsd_retrieve_image uses Image.NONE sentinel for no-images-available (not a real PIL constant).
 - WSDScannerMonitor class in wsd_scan__events.py has bugs: get_active_jobs/get_job_history pull from wrong queue (sc_cond_q instead of job_status_q/job_ended_q).
 - XML templates loaded via dumb string substitution ({{PLACEHOLDER}}) not XML tree manipulation (noted as TODO in wsd_common.py).
 - No error handling for network failures during scan job creation or image retrieval.
 - No logging framework — debug mode uses print() statements.
-- mail_service.py imports ntpath (Windows path module) for basename on Linux.
+- Scan output dir (./scans) is relative to CWD, not configurable.
 
 ## Samsung M288x Specifics
 
@@ -111,11 +124,11 @@ Phase 1 — Get it working with Samsung M288x:
 - Test end-to-end push-scan flow
 - Debug and fix any Samsung-specific protocol quirks
 
-Phase 2 — Packaging cleanup:
+Phase 2 — Packaging cleanup (DONE):
 - Add requirements.txt
-- Restructure into proper Python package (setup.py or pyproject.toml)
-- Fix flat imports to package-relative imports
-- Make pip-installable
+- Restructure into proper Python package (pyproject.toml + setuptools)
+- Fix flat imports to package-relative imports (from . import)
+- Make pip-installable (wsd-scan console script + python -m wsd_scan)
 
 Phase 3 — Daemon and production readiness:
 - Systemd service file
