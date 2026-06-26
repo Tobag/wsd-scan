@@ -2,11 +2,14 @@
 # -*- encoding: utf-8 -*-
 
 import datetime
+import logging
 import os
 import random
 import time
 import typing
 import uuid
+
+logger = logging.getLogger("wsd_scan")
 
 import lxml.etree as etree
 import requests
@@ -145,9 +148,8 @@ def submit_request(addrs: typing.Set[str],
 
     if wsd_globals.debug:
         r = etree.fromstring(data.encode("ASCII"), parser=parser)
-        print('##\n## %s REQUEST\n##\n' % op_name)
-        log_xml(r)
-        print(etree.tostring(r, pretty_print=True, xml_declaration=True).decode("ASCII"))
+        logger.debug("##\n## %s REQUEST\n##\n%s", op_name,
+                     etree.tostring(r, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
     for addr in addrs:
         # TODO: handle ipv6 link-local addresses, remember to specify interface in URI
@@ -159,9 +161,8 @@ def submit_request(addrs: typing.Set[str],
         x = etree.fromstring(r)
 
         if wsd_globals.debug:
-            print('##\n## %s RESPONSE\n##\n' % op_name)
-            log_xml(x)
-            print(etree.tostring(x, pretty_print=True, xml_declaration=True).decode("ASCII"))
+            logger.debug("##\n## %s RESPONSE\n##\n%s", op_name,
+                         etree.tostring(x, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
         return x
 
@@ -184,11 +185,8 @@ def check_fault(x: etree.ElementTree) \
         reason = get_xml_str(x, ".//soap:Reason/soap:Text")
         detail = get_xml_str(x, ".//soap:Detail")
         if wsd_globals.debug:
-            print('##\n## FAULT\n##\n')
-            print("Code: %s\n" % code)
-            print("Subcode: %s\n" % subcode)
-            print("Reason: %s\n" % reason)
-            print("Details: %s\n" % detail)
+            logger.debug("##\n## FAULT\n##\nCode: %s\nSubcode: %s\nReason: %s\nDetails: %s",
+                         code, subcode, reason, detail)
         return True
     else:
         return False

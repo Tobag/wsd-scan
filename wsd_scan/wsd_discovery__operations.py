@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 
+import logging
 import os
 import pickle
 import select
@@ -15,6 +16,8 @@ from . import wsd_common, \
     wsd_discovery__structures, \
     wsd_transfer__operations, \
     wsd_globals
+
+logger = logging.getLogger("wsd_scan")
 
 discovery_verbosity = 10
 
@@ -35,9 +38,8 @@ def send_unicast_soap_msg(target_address: str, xml_template: str,
 
     if wsd_globals.debug:
         r = etree.fromstring(message.encode("ASCII"), parser=wsd_common.parser)
-        print('##\n## %s\n##\n' % op_name)
-        wsd_common.log_xml(r)
-        print(etree.tostring(r, pretty_print=True, xml_declaration=True).decode("ASCII"))
+        logger.debug("##\n## %s\n##\n%s", op_name,
+                     etree.tostring(r, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
     return wsd_common.soap_post_unicast(target_address, message)
 
@@ -73,9 +75,8 @@ def wsd_probe(target_address: str, probe_timeout: int = 3) \
     action = wsd_common.get_action_id(x)
 
     if wsd_globals.debug:
-        # print('##\n## %s MATCH\n## %s\n##\n' % (action.split("/")[-1].upper(), server[0]))
-        wsd_common.log_xml(x)
-        print(etree.tostring(x, pretty_print=True, xml_declaration=True).decode("ASCII"))
+        logger.debug("##\n## PROBE MATCH\n##\n%s",
+                     etree.tostring(x, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
     if action == "http://schemas.xmlsoap.org/ws/2005/04/discovery/ProbeMatches":
         tt = wsd_common.parse(x).get_target_services()
@@ -111,9 +112,8 @@ def wsd_resolve(target_address: str, target_service: wsd_discovery__structures.T
     action = wsd_common.get_action_id(x)
 
     if wsd_globals.debug:
-        # print('##\n## %s MATCH\n## %s\n##\n' % (action.split("/")[-1].upper(), server[0]))
-        wsd_common.log_xml(x)
-        print(etree.tostring(x, pretty_print=True, xml_declaration=True).decode("ASCII"))
+        logger.debug("##\n## RESOLVE MATCH\n##\n%s",
+                     etree.tostring(x, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
     if action == "http://schemas.xmlsoap.org/ws/2005/04/discovery/ResolveMatches":
         ts = wsd_common.parse(x).get_target_service()[0]
@@ -160,5 +160,5 @@ def set_discovery_verbosity(lvl: int):
 
 
 def discovery_log(text: str, lvl: int = 1):
-    print(text) if discovery_verbosity >= lvl else None
+    logger.debug(text) if discovery_verbosity >= lvl else None
 

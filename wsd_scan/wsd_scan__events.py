@@ -319,8 +319,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_scanner_elements_change_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## SCANNER ELEMENTS CHANGE EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("SCANNER ELEMENTS CHANGE EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
         sca_config = wsd_common.xml_find(xml_tree, ".//sca:ScannerConfiguration")
         sca_descr = wsd_common.xml_find(xml_tree, ".//sca:ScannerDescription")
@@ -337,8 +336,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_scanner_status_summary_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## SCANNER STATUS SUMMARY EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("SCANNER STATUS SUMMARY EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
         state = wsd_common.xml_find(xml_tree, ".//sca:ScannerState").text
         reasons = []
@@ -352,8 +350,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_scanner_status_condition_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## SCANNER STATUS CONDITION EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("SCANNER STATUS CONDITION EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
         cond = wsd_common.xml_find(xml_tree, ".//sca:DeviceCondition")
         cond = wsd_scan__parsers.parse_scanner_condition(cond)
@@ -362,8 +359,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_scanner_status_condition_cleared_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## SCANNER STATUS CONDITION CLEARED EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("SCANNER STATUS CONDITION CLEARED EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
         cond = wsd_common.xml_find(xml_tree, ".//sca:DeviceConditionCleared")
         cond_id = int(wsd_common.xml_find(cond, ".//sca:ConditionId").text)
@@ -373,16 +369,14 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_job_status_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## JOB STATUS EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("JOB STATUS EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
             s = wsd_common.xml_find(xml_tree, ".//sca:JobStatus")
             queues.sc_job_status_q.put(wsd_scan__parsers.parse_job_status(s))
 
     @staticmethod
     def handle_job_end_state_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## JOB END STATE EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("JOB END STATE EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
             s = wsd_common.xml_find(xml_tree, ".//sca:JobEndState")
             queues.sc_job_ended_q.put(wsd_scan__parsers.parse_job_summary(s))
 

@@ -2,6 +2,7 @@
 # -*- encoding: utf-8 -*-
 
 import email
+import logging
 import typing
 from io import BytesIO
 
@@ -16,6 +17,8 @@ from . import wsd_common, \
     wsd_transfer__operations, \
     wsd_transfer__structures, \
     wsd_globals
+
+logger = logging.getLogger("wsd_scan")
 
 
 def wsd_get_scanner_elements(hosted_scan_service: wsd_transfer__structures.HostedService):
@@ -265,8 +268,8 @@ def wsd_retrieve_image(hosted_scan_service: wsd_transfer__structures.HostedServi
 
     if wsd_globals.debug:
         r = etree.fromstring(data.encode("ASCII"), parser=wsd_common.parser)
-        print('##\n## RETRIEVE IMAGE REQUEST\n##\n')
-        print(etree.tostring(r, pretty_print=True, xml_declaration=True).decode("ASCII"))
+        logger.debug("##\n## RETRIEVE IMAGE REQUEST\n##\n%s",
+                     etree.tostring(r, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
     r = requests.post(hosted_scan_service.ep_ref_addr, headers=wsd_common.headers, data=data)
 
@@ -295,10 +298,10 @@ def wsd_retrieve_image(hosted_scan_service: wsd_transfer__structures.HostedServi
         ls = list(m.walk())
 
         if wsd_globals.debug:
-            print('##\n## RETRIEVE IMAGE RESPONSE\n##\n%s\n' % ls[1])
+            logger.debug("##\n## RETRIEVE IMAGE RESPONSE\n##\n%s", ls[1])
 
         img = Image.open(BytesIO(ls[2].get_payload(decode=True)))
-        print("%s %s %s" % (img.format, img.size, img.mode))
+        logger.info("Image received: %s %s %s", img.format, img.size, img.mode)
 
         return img
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 
+import logging
+
+logger = logging.getLogger("wsd_scan")
+
 
 class TargetService:
     """
@@ -48,7 +52,7 @@ class HelloMessage:
 
     def get_target_service(self):
         if not self.is_valid():
-            print("Warning: invalid TargetService")
+            logger.warning("invalid TargetService")
         return self.ts
 
 
@@ -67,7 +71,7 @@ class ByeMessage:
 
     def get_target_service(self):
         if not self.is_valid():
-            print("Warning: invalid TargetService")
+            logger.warning("invalid TargetService")
         return self.ts
 
 
@@ -91,7 +95,7 @@ class ProbeMatchesMessage:
 
     def get_target_services(self):
         if not self.is_valid():
-            print("Warning: invalid TargetService")
+            logger.warning("invalid TargetService")
         return self.matches
 
 
@@ -116,5 +120,5 @@ class ResolveMatchesMessage:
 
     def get_target_service(self):
         if not self.is_valid():
-            print("Warning: invalid TargetService")
+            logger.warning("invalid TargetService")
         return self.ts

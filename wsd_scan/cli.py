@@ -21,7 +21,7 @@ DEFAULT_PORT = 6666
 
 
 def noop(args):
-    print("Nothing to do")
+    logger.info("Nothing to do")
 
 
 def read_profiles_from_yaml():
