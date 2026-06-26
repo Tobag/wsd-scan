@@ -1,6 +1,8 @@
 import threading
 import time
 import argparse
+import signal
+import sys
 import yaml
 
 from . import wsd_common
@@ -9,6 +11,7 @@ from . import wsd_globals
 from . import wsd_scan__events
 from . import wsd_transfer__operations
 from . import wsd_discovery__parsers
+from . import wsd_eventing__operations
 
 def noop(args):
     print("Nothing to do")
@@ -60,26 +63,41 @@ def start(args):
         if "wscn:ScannerServiceType" in hosted_service.types:
             listen_addr = "http://"+args.self+":6666/wsd"
 
-            while True:
-                print("Pushing profiles to device...")
-                for profile in wsd_globals.scan_profiles:
-                    client_context = profile["id"]
-                    wsd_scan__events.wsd_scanner_all_events_subscribe(hosted_service, listen_addr)
-                    _, dest_token = wsd_scan__events.wsd_scan_available_event_subscribe(hosted_service,
-                                                                           profile["name"],
-                                                                           client_context,
-                                                                           listen_addr)
-                    if dest_token is not None:
-                        wsd_scan__events.profile_map[client_context] = profile
-                        wsd_scan__events.token_map[client_context] = dest_token
-                        wsd_scan__events.host_map[client_context] = hosted_service
+            subscription_ids = []
 
-                # Subscribe once, then keep the process alive.
-                # Subscriptions last 1 hour (PT1H). TODO: use WS-Eventing Renew
-                # before expiry instead of re-subscribing from scratch.
-                print("Profiles pushed. Waiting for scan events...")
-                while True:
-                    time.sleep(1)
+            def cleanup_on_exit(sig, frame):
+                print("\nUnsubscribing from device...")
+                for sub_id in subscription_ids:
+                    try:
+                        wsd_eventing__operations.wsd_unsubscribe(hosted_service, sub_id)
+                    except Exception:
+                        pass
+                print("Done.")
+                sys.exit(0)
+
+            signal.signal(signal.SIGINT, cleanup_on_exit)
+            signal.signal(signal.SIGTERM, cleanup_on_exit)
+
+            print("Pushing profiles to device...")
+            for profile in wsd_globals.scan_profiles:
+                client_context = profile["id"]
+                sub_id = wsd_scan__events.wsd_scanner_all_events_subscribe(hosted_service, listen_addr)
+                subscription_ids.append(sub_id)
+                _, dest_token = wsd_scan__events.wsd_scan_available_event_subscribe(hosted_service,
+                                                                       profile["name"],
+                                                                       client_context,
+                                                                       listen_addr)
+                if dest_token is not None:
+                    wsd_scan__events.profile_map[client_context] = profile
+                    wsd_scan__events.token_map[client_context] = dest_token
+                    wsd_scan__events.host_map[client_context] = hosted_service
+
+            # Subscribe once, then keep the process alive.
+            # Subscriptions last 1 hour (PT1H). TODO: use WS-Eventing Renew
+            # before expiry instead of re-subscribing from scratch.
+            print("Profiles pushed. Waiting for scan events...")
+            while True:
+                time.sleep(1)
 
 
 def start_server_thread():
