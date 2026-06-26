@@ -18,6 +18,7 @@ def noop(args):
 
 
 def read_profiles_from_yaml():
+    import os
     from os import walk
 
     excluded_files = ["mail_service.yaml"]
@@ -33,6 +34,11 @@ def read_profiles_from_yaml():
         if file not in excluded_files:
             with open(profiles_dir + "/" + file) as yaml_file:
                 yaml_object = yaml.load(yaml_file, Loader=yaml.FullLoader)
+                # Expand ~ and $HOME in target_folder so users can write
+                # either absolute paths, ~/Pictures/scans, or $HOME/Pictures/scans
+                if "target_folder" in yaml_object:
+                    yaml_object["target_folder"] = os.path.expandvars(
+                        os.path.expanduser(yaml_object["target_folder"]))
                 profiles.append(yaml_object)
                 yaml_file.close()
 
