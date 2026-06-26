@@ -9,7 +9,7 @@ import lxml.etree as etree
 import requests
 from PIL import Image, ImageSequence
 
-import wsd_common, \
+from . import wsd_common, \
     wsd_discovery__operations, \
     wsd_scan__parsers, \
     wsd_scan__structures, \
@@ -120,7 +120,9 @@ def wsd_create_scan_job(hosted_scan_service: wsd_transfer__structures.HostedServ
                                   {**fields, **tkt.as_map()})
 
     if wsd_common.check_fault(x):
-        raise RuntimeError("CreateScanJob request rejected by device")
+        subcode = wsd_common.get_xml_str(x, ".//soap:Subcode/soap:Value")
+        reason = wsd_common.get_xml_str(x, ".//soap:Reason/soap:Text")
+        raise RuntimeError("CreateScanJob rejected: %s — %s" % (subcode, reason))
 
     x = wsd_common.xml_find(x, ".//sca:CreateScanJobResponse")
 
@@ -254,7 +256,7 @@ def wsd_retrieve_image(hosted_scan_service: wsd_transfer__structures.HostedServi
     :rtype: (int, list[PIL.Image])
     """
 
-    data = wsd_common.message_from_file(wsd_common.abs_path("./templates/ws-scan__retrieve_image.xml"),
+    data = wsd_common.message_from_file(wsd_common.abs_path("templates/ws-scan__retrieve_image.xml"),
                                         FROM=wsd_globals.urn,
                                         TO=hosted_scan_service.ep_ref_addr,
                                         JOB_ID=job.id,
