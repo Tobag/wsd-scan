@@ -11,7 +11,7 @@ image_format: jpeg
 # quality of the image (0-100) — used for PIL save quality
 quality: 70
 # the folder where the images are stored
-target_folder: ./scans
+target_folder: ~/Pictures/scans
 # send the scanned document to an email address
 send_email: False
 # wrap the scanned image(s) in a pdf file
