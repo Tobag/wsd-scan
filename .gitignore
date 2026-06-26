@@ -1,6 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+.install-record
 log/
 src/scans/*.jpeg
 src/scans/*.jpg
