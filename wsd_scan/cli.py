@@ -86,14 +86,19 @@ def start(args):
             signal.signal(signal.SIGTERM, cleanup_on_exit)
 
             print("Pushing profiles to device...")
+
+            # One all-events subscription (status, job events, etc.)
+            all_events_sub = wsd_scan__events.wsd_scanner_all_events_subscribe(hosted_service, listen_addr)
+            subscription_ids.append(all_events_sub)
+
+            # One scan-available subscription per profile (creates panel entries)
             for profile in wsd_globals.scan_profiles:
                 client_context = profile["id"]
-                sub_id = wsd_scan__events.wsd_scanner_all_events_subscribe(hosted_service, listen_addr)
-                subscription_ids.append(sub_id)
-                _, dest_token = wsd_scan__events.wsd_scan_available_event_subscribe(hosted_service,
+                sub_id, dest_token = wsd_scan__events.wsd_scan_available_event_subscribe(hosted_service,
                                                                        profile["name"],
                                                                        client_context,
                                                                        listen_addr)
+                subscription_ids.append(sub_id)
                 if dest_token is not None:
                     wsd_scan__events.profile_map[client_context] = profile
                     wsd_scan__events.token_map[client_context] = dest_token
