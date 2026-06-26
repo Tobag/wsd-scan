@@ -84,7 +84,11 @@ def start(args):
             return
 
     logger.info("Device found. Getting metadata...")
-    (target_info, hosted_services) = wsd_transfer__operations.wsd_get(target_service)
+    try:
+        (target_info, hosted_services) = wsd_transfer__operations.wsd_get(target_service)
+    except StopIteration:
+        logger.error("Device did not respond to WS-Transfer Get. It may need a reboot.")
+        return
 
     logger.info("Loading profiles...")
     wsd_globals.scan_profiles = read_profiles_from_yaml()

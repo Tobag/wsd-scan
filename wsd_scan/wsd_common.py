@@ -109,19 +109,23 @@ def soap_post_unicast(addr: str,
     min_delay = 50
     max_delay = 250
     upper_delay = 500
-    try:
-        repeat = 2
-        t = random.uniform(min_delay, max_delay)
-        while repeat:
-            try:
-                return requests.post(addr, headers=headers, data=data, timeout=100).content
-            except requests.Timeout:
-                time.sleep(t / 1000.0)
-                t = t * 2 if t * 2 < upper_delay else upper_delay
-                repeat -= 1
-        return None
-    except requests.ConnectionError:
-        return None
+    repeat = 2
+    t = random.uniform(min_delay, max_delay)
+    while repeat:
+        try:
+            return requests.post(addr, headers=headers, data=data, timeout=100).content
+        except requests.Timeout:
+            logger.warning("Request to %s timed out (%d retries left)", addr, repeat - 1)
+            time.sleep(t / 1000.0)
+            t = t * 2 if t * 2 < upper_delay else upper_delay
+            repeat -= 1
+        except requests.ConnectionError as e:
+            logger.warning("Connection error to %s: %s (%d retries left)", addr, e, repeat - 1)
+            time.sleep(t / 1000.0)
+            t = t * 2 if t * 2 < upper_delay else upper_delay
+            repeat -= 1
+    logger.error("All retries exhausted for %s", addr)
+    return None
 
 
 def submit_request(addrs: typing.Set[str],

@@ -584,8 +584,20 @@ def device_initiated_scan_worker(client_context: str,
 
     try:
         while more_images_available:
-            job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
-            img = wsd_scan__operations.wsd_retrieve_image(host, job, file_name)
+            try:
+                job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
+            except RuntimeError as e:
+                logger.error("CreateScanJob failed: %s", e)
+                break
+            except StopIteration:
+                logger.error("CreateScanJob: device did not respond. Aborting scan.")
+                break
+
+            try:
+                img = wsd_scan__operations.wsd_retrieve_image(host, job, file_name)
+            except Exception as e:
+                logger.error("RetrieveImage failed: %s", e)
+                break
 
             if img == Image.NONE:
                 more_images_available = False
@@ -593,6 +605,7 @@ def device_initiated_scan_worker(client_context: str,
 
             picture_file = "%s/%s_%d.%s" % (profile["target_folder"], file_name, image_id, save_format)
             img.save(picture_file, format=save_format, quality=profile["quality"])
+            logger.info("Saved: %s", picture_file)
             picture_files.append(picture_file)
             image_id += 1
 
@@ -600,15 +613,16 @@ def device_initiated_scan_worker(client_context: str,
             if std_ticket.doc_params.input_src == "Platen":
                 more_images_available = False
 
-        if profile["use_pdf"]:
+        if picture_files and profile["use_pdf"]:
             pdf_file_name = "%s/%s.pdf" % (profile["target_folder"], file_name)
             with open(pdf_file_name, "wb") as f:
                 f.write(img2pdf.convert(picture_files))
+            logger.info("Saved PDF: %s", pdf_file_name)
             attachments = [pdf_file_name]
         else:
             attachments = picture_files
 
-        if profile["send_email"]:
+        if profile["send_email"] and attachments:
             mail_service.MailService().sendMaiWithScannedDocuments(attachments)
 
     except Exception as e:
