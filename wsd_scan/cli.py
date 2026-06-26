@@ -58,13 +58,31 @@ def start(args):
 
     port = args.port
 
-    logger.info("Target: %s", args.target)
+    if args.auto:
+        scanners = wsd_discovery__operations.auto_discover_scanners(timeout=5)
+        if not scanners:
+            logger.error("No WSD scanners found on the network. Use -t to specify target manually.")
+            return
+        if len(scanners) == 1:
+            target_service = scanners[0]
+            logger.info("Auto-discovered scanner: %s", target_service.ep_ref_addr)
+        else:
+            logger.info("Found %d scanners:", len(scanners))
+            for i, s in enumerate(scanners):
+                logger.info("  [%d] %s", i, s.ep_ref_addr)
+            target_service = scanners[0]
+            logger.info("Using first scanner: %s", target_service.ep_ref_addr)
+    else:
+        if not args.target:
+            logger.error("Either --auto or --target is required.")
+            return
+        logger.info("Target: %s", args.target)
+        logger.info("Discovering device...")
+        target_service = wsd_discovery__operations.get_device(args.target)
+        if target_service is None:
+            logger.error("Device not found at %s", args.target)
+            return
 
-    logger.info("Discovering device...")
-    target_service = wsd_discovery__operations.get_device(args.target)
-    if target_service is None:
-        logger.error("Device not found at %s", args.target)
-        return
     logger.info("Device found. Getting metadata...")
     (target_info, hosted_services) = wsd_transfer__operations.wsd_get(target_service)
 
@@ -144,12 +162,15 @@ def main():
     subparsers = parser.add_subparsers()
 
     start_parser = subparsers.add_parser("start", help="Start the scan receiver")
-    start_parser.add_argument('-t', '--target', action="store", required=True, type=str,
-                              help="WSD endpoint URL of the scanner (e.g. http://192.168.0.149:8018/wsd)")
+    start_parser.add_argument('-t', '--target', action="store", default=None, type=str,
+                              help="WSD endpoint URL of the scanner (e.g. http://192.168.0.149:8018/wsd). "
+                                   "Required unless --auto is used.")
     start_parser.add_argument('-s', '--self', action="store", required=True, type=str,
                               help="Local IP the scanner can reach (e.g. 192.168.0.110)")
     start_parser.add_argument('-p', '--port', action="store", type=int, default=DEFAULT_PORT,
                               help="HTTP listener port (default: %d)" % DEFAULT_PORT)
+    start_parser.add_argument('--auto', action="store_true", default=False,
+                              help="Auto-discover WSD scanners via UDP multicast (no -t needed)")
     start_parser.add_argument('-d', '--debug', action="store_true", default=False,
                               help="Enable debug output (SOAP exchanges)")
     start_parser.set_defaults(func=start)
