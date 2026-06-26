@@ -1,8 +1,9 @@
+import argparse
+import os
+import signal
 import threading
 import time
-import argparse
-import signal
-import sys
+
 import yaml
 
 from . import wsd_common
@@ -78,8 +79,8 @@ def start(args):
                         wsd_eventing__operations.wsd_unsubscribe(hosted_service, sub_id)
                     except Exception:
                         pass
-                print("Done.")
-                sys.exit(0)
+                print("Done. Exiting.")
+                os._exit(0)
 
             signal.signal(signal.SIGINT, cleanup_on_exit)
             signal.signal(signal.SIGTERM, cleanup_on_exit)
