@@ -11,7 +11,7 @@ import uuid
 import lxml.etree as etree
 import requests
 
-import wsd_globals
+from . import wsd_globals
 
 NSMAP = {"soap": "http://www.w3.org/2003/05/soap-envelope",
          "mex": "http://schemas.xmlsoap.org/ws/2004/09/mex",
@@ -26,7 +26,7 @@ NSMAP = {"soap": "http://www.w3.org/2003/05/soap-envelope",
          "df": "http://schemas.microsoft.com/windows/2008/09/devicefoundation"}
 
 headers = {'user-agent': 'WSDAPI', 'content-type': 'application/soap+xml'}
-log_path = "../log"
+log_path = None
 
 parser = etree.XMLParser(remove_blank_text=True)
 
@@ -405,7 +405,8 @@ def log_xml(xml_tree: etree.ElementTree) \
     :param xml_tree: the node to dump
     :type xml_tree: etree.ElementTree
     """
-    #logfile = open(log_path + "/" + datetime.datetime.now().isoformat(), "w")
+    if log_path is None:
+        return
     logfile = open(log_path + "/test.log", "w")
     logfile.write(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
@@ -424,7 +425,8 @@ def enable_debug(status: bool = True) \
 #######################
 
 wsd_globals.urn = gen_urn()
-try:
-    os.mkdir(log_path)
-except FileExistsError:
-    pass
+if log_path is not None:
+    try:
+        os.mkdir(log_path)
+    except FileExistsError:
+        pass
