@@ -139,8 +139,28 @@ def start(args):
             # Subscriptions last 1 hour (PT1H). TODO: use WS-Eventing Renew
             # before expiry instead of re-subscribing from scratch.
             logger.info("Profiles pushed. Waiting for scan events on port %d...", port)
+
+            # Profile hot-reload: poll profiles dir for changes
+            profiles_dir = wsd_common.abs_path("profiles")
+            last_mtime = os.path.getmtime(profiles_dir)
+
             while True:
-                time.sleep(1)
+                time.sleep(2)
+                try:
+                    current_mtime = os.path.getmtime(profiles_dir)
+                    if current_mtime != last_mtime:
+                        last_mtime = current_mtime
+                        logger.info("Profiles changed, reloading...")
+                        new_profiles = read_profiles_from_yaml()
+                        wsd_globals.scan_profiles = new_profiles
+                        for p in new_profiles:
+                            ctx = p["id"]
+                            if ctx in wsd_scan__events.profile_map:
+                                wsd_scan__events.profile_map[ctx] = p
+                                logger.info("Updated profile: %s", ctx)
+                        logger.info("Profile reload complete (%d profiles).", len(new_profiles))
+                except Exception as e:
+                    logger.debug("Profile reload check failed: %s", e)
 
 
 def start_server_thread(port=DEFAULT_PORT):
