@@ -66,6 +66,9 @@ pitfalls are in `WSD-SCAN-PITFALLS.md`.
 - In one observed case, pressing a profile on the panel after the device was
   overwhelmed caused it to display garbled text (including the word "param")
   and then **reboot itself**. After reboot, all subscriptions are cleared.
+- Ctrl-C without unsubscribing also leaves stale subscription state. The device
+  still responds to WS-Discovery Probe but hangs on WS-Transfer Get. A physical
+  reboot is required to recover.
 - After a reboot, wait ~30 seconds for the WSD service to come back online
   before re-subscribing. `ping` works immediately but the WSD HTTP endpoint
   takes longer.

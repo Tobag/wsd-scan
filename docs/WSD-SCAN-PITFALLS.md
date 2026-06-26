@@ -120,6 +120,70 @@ All modules use flat imports (`import wsd_common`, not `from package import
 wsd_common`). Scripts must run from the `src/` directory. This is tracked as
 Phase 2 packaging work. Until fixed, always `cd src/` before running.
 
+## Hardcoded `../log` Directory
+
+The original `wsd_common.py` had `log_path = "../log"` and called `os.mkdir(log_path)`
+at import time. This is relative to CWD, so running from any directory outside
+the repo causes `PermissionError`. The `log_xml()` function is unused in normal
+operation (debug mode prints to stdout). Fix: set `log_path = None` and skip
+mkdir when it's None.
+
+## YAML Path Expansion
+
+Python does not expand `~` or `$HOME` in string paths. A YAML profile with
+`target_folder: ~/Pictures/scans` will fail with `FileNotFoundError` because
+the `~` is treated as a literal directory name. Fix: call
+`os.path.expanduser(os.path.expandvars(path))` at profile load time in
+`read_profiles_from_yaml()`.
+
+## `ntpath` on Linux
+
+The original `mail_service.py` used `ntpath.basename()` (Windows path module)
+on Linux. This works by accident (ntpath and posixpath share basename logic
+for simple cases) but is incorrect. Fix: use `os.path.basename()`.
+
+## Silent Startup
+
+The original `start()` function printed only the target URL, then entered a
+chain of network operations (probe, Get, profile load, server start) with no
+output. If the device is slow or unresponsive, the process appears to hang
+silently for up to 100 seconds per request. Fix: print progress at each step
+("Discovering device...", "Device found. Getting metadata...", "Loading
+profiles...", etc.).
+
+## `sys.exit()` vs `os._exit()` in Signal Handlers
+
+Using `sys.exit(0)` in a SIGINT handler to clean up and quit does not work
+when the process has active background threads (e.g. the HTTP server thread).
+`sys.exit()` raises `SystemExit`, which propagates up the call stack of the
+signal handler — but the main thread is in `time.sleep(1)` and the HTTP server
+thread keeps the process alive, so the process hangs after printing "Done."
+
+Fix: use `os._exit(0)` after cleanup. It terminates the process immediately
+without giving threads a chance to block.
+
+## Unsubscribe on Shutdown
+
+Ctrl-C (SIGINT) without unsubscribing leaves stale subscription state on the
+device. On the Samsung M288x, this causes the device to hang on subsequent
+WS-Transfer Get requests — the probe still works, but metadata retrieval
+times out (100s). The device may require a physical reboot to recover.
+
+Fix: install a SIGINT/SIGTERM handler that sends WS-Eventing Unsubscribe for
+each active subscription before calling `os._exit(0)`. Collect subscription
+IDs in a list during the subscribe phase so the handler can iterate them.
+
+## Duplicate All-Events Subscriptions
+
+The original subscription loop called `wsd_scanner_all_events_subscribe()`
+inside the per-profile loop, creating N duplicate all-events subscriptions
+(one per profile) in addition to N scan-available subscriptions. On the
+Samsung, multiple rapid subscriptions invalidate DestinationTokens.
+
+Fix: call `wsd_scanner_all_events_subscribe()` once outside the profile loop,
+then call `wsd_scan_available_event_subscribe()` once per profile. Total
+subscriptions = 1 + N, not 2N.
+
 ## No Error Handling in Network Operations
 
 The original code has no try/except around HTTP requests, scan job creation,
