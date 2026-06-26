@@ -2,7 +2,7 @@
         xmlns:soap="http://www.w3.org/2003/05/soap-envelope"
         xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing"
         xmlns:wse="http://schemas.xmlsoap.org/ws/2004/08/eventing"
-        xmlns:wscn="http://schemas.microsoft.com/windows/2006/01/wdp/scan">
+        xmlns:wscn="http://schemas.microsoft.com/windows/2006/08/wdp/scan">
     <soap:Header>
         <wsa:From>
             <wsa:Address>{{FROM}}</wsa:Address>

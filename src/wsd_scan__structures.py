@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 
+import copy
+
 import wsd_common
 
 
@@ -177,6 +179,12 @@ class ScanTicket:
         self.doc_params.compression_factor = 100
         self.doc_params.images_num = 1
 
+        # Sync back side with front so the ticket is consistent
+        # (parser deep-copies front→back when no MediaBack in response,
+        # but override_params only updated front above)
+        if self.doc_params.back is not None:
+            self.doc_params.back = copy.deepcopy(self.doc_params.front)
+
 
     def as_map(self):
         return {'JOB_NAME': self.job_name,
@@ -187,10 +195,10 @@ class ScanTicket:
                 'IMG_NUM': self.doc_params.images_num,
                 'INPUT_SRC': self.doc_params.input_src,
                 'CONTENT_TYPE': self.doc_params.content_type,
-                'SIZE_AUTODETECT': self.doc_params.size_autodetect,
+                'SIZE_AUTODETECT': str(self.doc_params.size_autodetect).lower(),
                 'INPUT_W': self.doc_params.input_size[0],
                 'INPUT_H': self.doc_params.input_size[1],
-                'AUTO_EXPOSURE': self.doc_params.auto_exposure,
+                'AUTO_EXPOSURE': str(self.doc_params.auto_exposure).lower(),
                 'CONTRAST': self.doc_params.contrast,
                 'BRIGHTNESS': self.doc_params.brightness,
                 'SHARPNESS': self.doc_params.sharpness,

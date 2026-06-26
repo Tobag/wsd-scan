@@ -303,10 +303,13 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
         client_context = wsd_common.xml_find(xml_tree, ".//sca:ClientContext").text
         scan_identifier = wsd_common.xml_find(xml_tree, ".//sca:ScanIdentifier").text
+        input_source_el = wsd_common.xml_find(xml_tree, ".//sca:InputSource")
+        input_source = input_source_el.text if input_source_el is not None else None
         t = threading.Thread(target=device_initiated_scan_worker,
                              args=(client_context,
                                    scan_identifier,
-                                   "scan-" + datetime.now().strftime("%Y-%m-%d_%H_%M_%S")))
+                                   "scan-" + datetime.now().strftime("%Y-%m-%d_%H_%M_%S"),
+                                   input_source))
         t.start()
 
     @staticmethod
@@ -542,7 +545,8 @@ class WSDScannerMonitor:
 
 def device_initiated_scan_worker(client_context: str,
                                  scan_identifier: str,
-                                 file_name: str):
+                                 file_name: str,
+                                 input_source: str = None):
     """
     Reply to a ScanAvailable event by issuing the creation of a new scan job.
     Waits for job completion and writes the output to files.
@@ -553,6 +557,8 @@ def device_initiated_scan_worker(client_context: str,
     :type scan_identifier: str
     :param file_name: the prefix name of the files to write.
     :type file_name: str
+    :param input_source: the input source from the ScanAvailableEvent (e.g. "Platen", "ADF")
+    :type input_source: str
     """
     host = host_map[client_context]
     dest_token = token_map[client_context]
@@ -561,11 +567,13 @@ def device_initiated_scan_worker(client_context: str,
 
     std_ticket.override_params(profile)
 
-    platen_fallback = False
-    # for auto input we try ADF first and use Platen as a fallback
-    if std_ticket.doc_params.input_src == "Auto":
+    # Use the input source from the ScanAvailableEvent if provided.
+    # The device knows what's available (paper in ADF vs Platen).
+    # Fall back to the profile's input_src if the event doesn't specify.
+    if input_source is not None:
+        std_ticket.doc_params.input_src = input_source
+    elif std_ticket.doc_params.input_src == "Auto":
         std_ticket.doc_params.input_src = "ADF"
-        platen_fallback = True
 
     save_format = profile["image_format"]
 
@@ -574,37 +582,34 @@ def device_initiated_scan_worker(client_context: str,
 
     more_images_available = True
 
-    while more_images_available:
-        job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
-        img = wsd_scan__operations.wsd_retrieve_image(host, job, file_name)
+    try:
+        while more_images_available:
+            job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
+            img = wsd_scan__operations.wsd_retrieve_image(host, job, file_name)
 
-        if img == Image.NONE:
-            if platen_fallback:
-                std_ticket.doc_params.input_src = "Platen"
-                continue
-            else:
+            if img == Image.NONE:
                 more_images_available = False
                 break
 
-        picture_file = "%s/%s_%d.%s" % (profile["target_folder"], file_name, image_id, save_format)
-        img.save(picture_file, format=save_format, quality=profile["quality"])
-        picture_files.append(picture_file)
-        image_id += 1
+            picture_file = "%s/%s_%d.%s" % (profile["target_folder"], file_name, image_id, save_format)
+            img.save(picture_file, format=save_format, quality=profile["quality"])
+            picture_files.append(picture_file)
+            image_id += 1
 
-        # Try again with platen only once
-        if platen_fallback:
-            platen_fallback = False
-        # Only check for more images if the ADF is used
-        elif std_ticket.doc_params.input_src == "Platen":
-            more_images_available = False
+            # Only check for more images if the ADF is used
+            if std_ticket.doc_params.input_src == "Platen":
+                more_images_available = False
 
-    if profile["use_pdf"]:
-        pdf_file_name = "%s/%s.pdf" % (profile["target_folder"], file_name)
-        with open(pdf_file_name, "wb") as f:
-            f.write(img2pdf.convert(picture_files))
-        attachments = [pdf_file_name]
-    else:
-        attachments = picture_files
+        if profile["use_pdf"]:
+            pdf_file_name = "%s/%s.pdf" % (profile["target_folder"], file_name)
+            with open(pdf_file_name, "wb") as f:
+                f.write(img2pdf.convert(picture_files))
+            attachments = [pdf_file_name]
+        else:
+            attachments = picture_files
 
-    if profile["send_email"]:
-        mail_service.MailService().sendMaiWithScannedDocuments(attachments)
+        if profile["send_email"]:
+            mail_service.MailService().sendMaiWithScannedDocuments(attachments)
+
+    except Exception as e:
+        print("Scan worker error: %s" % e)

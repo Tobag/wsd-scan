@@ -3,6 +3,7 @@ import time
 import argparse
 import yaml
 
+import wsd_common
 import wsd_discovery__operations
 import wsd_globals
 import wsd_scan__events
@@ -19,8 +20,8 @@ def read_profiles_from_yaml():
     excluded_files = ["mail_service.yaml"]
 
     files = []
-    for (dirpath, dirnames, files) in walk("./profiles"):
-        files.extend(files)
+    for (dirpath, dirnames, filenames) in walk("./profiles"):
+        files.extend(filenames)
         break
 
     profiles = []
@@ -35,6 +36,8 @@ def read_profiles_from_yaml():
 
 
 def start(args):
+    if args.debug:
+        wsd_common.enable_debug()
     print(args.target)
 
     target_service = wsd_discovery__operations.get_device(args.target)
@@ -62,8 +65,12 @@ def start(args):
                         wsd_scan__events.token_map[client_context] = dest_token
                         wsd_scan__events.host_map[client_context] = hosted_service
 
-                # Refresh profiles every 60 seconds
-                time.sleep(60)
+                # Subscribe once, then keep the process alive.
+                # Subscriptions last 1 hour (PT1H). TODO: use WS-Eventing Renew
+                # before expiry instead of re-subscribing from scratch.
+                print("Profiles pushed. Waiting for scan events...")
+                while True:
+                    time.sleep(1)
 
 
 def start_server_thread():
@@ -73,7 +80,8 @@ def start_server_thread():
 
 def start_server():
     print("Starting server...")
-    server = wsd_scan__events.HTTPServerWithContext(('', 6666), wsd_scan__events.RequestHandler, "context")
+    context = {"queues": wsd_scan__events.QueuesSet()}
+    server = wsd_scan__events.HTTPServerWithContext(('', 6666), wsd_scan__events.RequestHandler, context)
     server.serve_forever()
 
 
@@ -88,6 +96,7 @@ def main():
     list_parser = subparsers.add_parser("start")
     list_parser.add_argument('-t', '--target', action="store", required=True, type=str, help=help_filter)
     list_parser.add_argument('-s', '--self', action="store", required=True, type=str, help=help_filter)
+    list_parser.add_argument('-d', '--debug', action="store_true", default=False, help="Enable debug output")
     list_parser.set_defaults(func=start)
 
     args = parser.parse_args()

@@ -119,6 +119,9 @@ def wsd_create_scan_job(hosted_scan_service: wsd_transfer__structures.HostedServ
                                   "ws-scan__create_scan_job.xml",
                                   {**fields, **tkt.as_map()})
 
+    if wsd_common.check_fault(x):
+        raise RuntimeError("CreateScanJob request rejected by device")
+
     x = wsd_common.xml_find(x, ".//sca:CreateScanJobResponse")
 
     return wsd_scan__parsers.parse_scan_job(x)

@@ -1,22 +1,24 @@
 # id is used as the client_context and has to be unique
 id: jpeg_scan
 # display name that will be shown on the printer
-name: Farbe Jpeg
+name: Color JPEG
 # color to use e.g. RGB24, Grayscale8, BlackAndWhite1
 color: RGB24
-# the image format which will be used
+# WSD format string (device-dependent; Samsung M288x supports: jfif, tiff-single-uncompressed)
+format: jfif
+# the image format which will be used by PIL for saving
 image_format: jpeg
-# quality of the image (0-100)
+# quality of the image (0-100) — used for PIL save quality
 quality: 70
 # the folder where the images are stored
 target_folder: ./scans
 # send the scanned document to an email address
-send_email: True
+send_email: False
 # wrap the scanned image(s) in a pdf file
 use_pdf: False
 # paper size - valid values are: A4, A5, Letter
 paper_size: A4
-# resolution (dpi)
+# resolution (dpi) - Samsung M288x supports: 75, 100, 150, 200, 300
 resolution: 200
-# input source - valiod values are: Auto, ADF, Platen
+# input source - valid values are: Auto, ADF, Platen
 input_src: Auto
