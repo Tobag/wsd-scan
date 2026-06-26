@@ -3,12 +3,12 @@ import time
 import argparse
 import yaml
 
-import wsd_common
-import wsd_discovery__operations
-import wsd_globals
-import wsd_scan__events
-import wsd_transfer__operations
-import wsd_discovery__parsers
+from . import wsd_common
+from . import wsd_discovery__operations
+from . import wsd_globals
+from . import wsd_scan__events
+from . import wsd_transfer__operations
+from . import wsd_discovery__parsers
 
 def noop(args):
     print("Nothing to do")
@@ -18,16 +18,17 @@ def read_profiles_from_yaml():
     from os import walk
 
     excluded_files = ["mail_service.yaml"]
+    profiles_dir = wsd_common.abs_path("profiles")
 
     files = []
-    for (dirpath, dirnames, filenames) in walk("./profiles"):
+    for (dirpath, dirnames, filenames) in walk(profiles_dir):
         files.extend(filenames)
         break
 
     profiles = []
     for file in files:
         if file not in excluded_files:
-            with open("./profiles/"+file) as yaml_file:
+            with open(profiles_dir + "/" + file) as yaml_file:
                 yaml_object = yaml.load(yaml_file, Loader=yaml.FullLoader)
                 profiles.append(yaml_object)
                 yaml_file.close()
@@ -40,11 +41,19 @@ def start(args):
         wsd_common.enable_debug()
     print(args.target)
 
+    print("Discovering device...")
     target_service = wsd_discovery__operations.get_device(args.target)
+    if target_service is None:
+        print("ERROR: Device not found at %s" % args.target)
+        return
+    print("Device found. Getting metadata...")
     (target_info, hosted_services) = wsd_transfer__operations.wsd_get(target_service)
 
+    print("Loading profiles...")
     wsd_globals.scan_profiles = read_profiles_from_yaml()
+    print("Loaded %d profile(s)." % len(wsd_globals.scan_profiles))
 
+    print("Starting HTTP listener on port 6666...")
     start_server_thread()
 
     for hosted_service in hosted_services:
