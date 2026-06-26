@@ -3,6 +3,7 @@
 
 import copy
 import http.server
+import logging
 import queue
 import threading
 import typing
@@ -12,14 +13,16 @@ import img2pdf as img2pdf
 import lxml.etree as etree
 from PIL import Image
 
-import mail_service
-import wsd_common
-import wsd_eventing__operations
-import wsd_globals
-import wsd_scan__operations
-import wsd_scan__parsers
-import wsd_transfer__structures
-import xml_helpers
+from . import mail_service
+from . import wsd_common
+from . import wsd_eventing__operations
+from . import wsd_globals
+from . import wsd_scan__operations
+from . import wsd_scan__parsers
+from . import wsd_transfer__structures
+from . import xml_helpers
+
+logger = logging.getLogger("wsd_scan")
 
 token_map = {}
 host_map = {}
@@ -299,12 +302,13 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_scan_available_event(xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## SCAN AVAILABLE EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("SCAN AVAILABLE EVENT\n%s",
+                         etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
         client_context = wsd_common.xml_find(xml_tree, ".//sca:ClientContext").text
         scan_identifier = wsd_common.xml_find(xml_tree, ".//sca:ScanIdentifier").text
         input_source_el = wsd_common.xml_find(xml_tree, ".//sca:InputSource")
         input_source = input_source_el.text if input_source_el is not None else None
+        logger.info("Scan requested: context=%s source=%s", client_context, input_source)
         t = threading.Thread(target=device_initiated_scan_worker,
                              args=(client_context,
                                    scan_identifier,
@@ -612,4 +616,4 @@ def device_initiated_scan_worker(client_context: str,
             mail_service.MailService().sendMaiWithScannedDocuments(attachments)
 
     except Exception as e:
-        print("Scan worker error: %s" % e)
+        logger.error("Scan worker error: %s", e)
