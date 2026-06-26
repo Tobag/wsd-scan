@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 
-import wsd_common, \
+from . import wsd_common, \
     wsd_discovery__operations, \
     wsd_discovery__structures, \
     wsd_transfer__structures, \

@@ -2,7 +2,7 @@ import typing
 
 from lxml import etree
 
-import wsd_common, \
+from . import wsd_common, \
     wsd_discovery__structures
 
 

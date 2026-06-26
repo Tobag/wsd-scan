@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import lxml.etree as etree
 
-import wsd_common, \
+from . import wsd_common, \
     wsd_transfer__structures, \
     xml_helpers, \
     wsd_globals

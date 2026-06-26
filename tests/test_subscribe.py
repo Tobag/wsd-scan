@@ -4,18 +4,17 @@ This verifies the full push-scan setup short of actually pressing the scan butto
 """
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import wsd_common
-import wsd_globals
-import wsd_discovery__operations
-import wsd_discovery__parsers
-import wsd_transfer__operations
-import wsd_transfer__structures
-import wsd_scan__events
-import wsd_scan__operations
-import wsd_scan__parsers
-import wsd_scan__structures
+from wsd_scan import wsd_common
+from wsd_scan import wsd_globals
+from wsd_scan import wsd_discovery__operations
+from wsd_scan import wsd_discovery__parsers
+from wsd_scan import wsd_transfer__operations
+from wsd_scan import wsd_transfer__structures
+from wsd_scan import wsd_scan__events
+from wsd_scan import wsd_scan__operations
+from wsd_scan import wsd_scan__parsers
+from wsd_scan import wsd_scan__structures
 import yaml
 
 wsd_globals.debug = True
@@ -27,9 +26,9 @@ LISTEN_ADDR = "http://%s:6666/wsd" % SELF_IP
 
 def read_profiles():
     profiles = []
-    for f in os.listdir("./profiles"):
+    for f in os.listdir(wsd_common.abs_path("profiles")):
         if f.endswith(".yaml") and f != "mail_service.yaml":
-            with open("./profiles/" + f) as yf:
+            with open(wsd_common.abs_path("profiles") + "/" + f) as yf:
                 profiles.append(yaml.load(yf, Loader=yaml.FullLoader))
     return profiles
 

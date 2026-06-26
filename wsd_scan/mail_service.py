@@ -1,12 +1,14 @@
 import smtplib
 import ssl
+import os
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import yaml
-import ntpath
+
+from . import wsd_common
 
 
 class MailService:
@@ -14,7 +16,7 @@ class MailService:
         return
 
     def sendMaiWithScannedDocuments(self, attachments):
-        with open("./profiles/mail_service.yaml") as yaml_file:
+        with open(wsd_common.abs_path("profiles/mail_service.yaml")) as yaml_file:
             yaml_object = yaml.load(yaml_file, Loader=yaml.FullLoader)
             yaml_file.close()
 
@@ -55,7 +57,7 @@ class MailService:
         # Add header as key/value pair to attachment part
         part.add_header(
             "Content-Disposition",
-            "attachment; filename=%s" % ntpath.basename(filepath),
+            "attachment; filename=%s" % os.path.basename(filepath),
         )
         # Add attachment to message and convert message to string
         message.attach(part)

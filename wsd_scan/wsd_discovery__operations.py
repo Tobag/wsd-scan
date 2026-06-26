@@ -11,7 +11,7 @@ import typing
 
 import lxml.etree as etree
 
-import wsd_common, \
+from . import wsd_common, \
     wsd_discovery__structures, \
     wsd_transfer__operations, \
     wsd_globals

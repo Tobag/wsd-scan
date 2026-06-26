@@ -4,13 +4,12 @@ Uses the project's own modules to check if the Probe and WS-Transfer Get work.
 """
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import wsd_common
-import wsd_globals
-import wsd_discovery__operations
-import wsd_discovery__parsers  # triggers parser registration
-import wsd_transfer__operations
+from wsd_scan import wsd_common
+from wsd_scan import wsd_globals
+from wsd_scan import wsd_discovery__operations
+from wsd_scan import wsd_discovery__parsers  # triggers parser registration
+from wsd_scan import wsd_transfer__operations
 
 wsd_globals.debug = True
 
