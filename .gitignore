@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 *.swp
+token
 .install-record
 log/
 src/scans/*.jpeg
