@@ -19,19 +19,28 @@ Based on [roncapat/WSD-python](https://github.com/roncapat/WSD-python).
 ## Quick start
 
 ```bash
-# Install (system-wide service, default)
-./install.sh -t http://PRINTER_IP:PORT/wsd -s YOUR_IP
+# Install — auto-discovers scanner on the network, auto-detects local IP
+./install.sh
 
 # Install (user-level service, no sudo)
-./install.sh --user -t http://PRINTER_IP:PORT/wsd -s YOUR_IP
+./install.sh --user
+
+# Install with explicit target (skip discovery)
+./install.sh -t http://PRINTER_IP:PORT/wsd -s YOUR_IP
 
 # Or just the pip package, no systemd
 pip install -e .
 ```
 
-`install.sh` creates a project venv (`.venv/`), pip-installs the package, fills
-the `wsd-scan.service` template with your parameters, enables and starts the
-service, and writes `.install-record` (used by `uninstall.sh`).
+`install.sh` creates a project venv (`.venv/`), pip-installs the package,
+auto-discovers WSD scanners via UDP multicast (filtering for `/wsd` endpoints),
+auto-detects your local IP from the default route, fills the
+`wsd-scan.service` template with those values, enables and starts the service,
+and writes `.install-record` (used by `uninstall.sh`).
+
+If multiple scanners are found, you'll be prompted to pick one. If none are
+found, you can enter the URL manually. Use `--no-discover` to skip
+auto-discovery entirely.
 
 To find your printer's WSD endpoint:
 ```bash

@@ -1,6 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+*.swp
 .install-record
 log/
 src/scans/*.jpeg

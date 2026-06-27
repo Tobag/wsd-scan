@@ -14,6 +14,7 @@ import lxml.etree as etree
 
 from . import wsd_common, \
     wsd_discovery__structures, \
+    wsd_discovery__parsers, \
     wsd_transfer__operations, \
     wsd_globals
 
@@ -182,6 +183,9 @@ def wsd_multicast_probe(timeout: int = 4) \
             except socket.timeout:
                 break
             except etree.XMLSyntaxError:
+                continue
+            except Exception as e:
+                logger.debug("Error parsing discovery response: %s", e)
                 continue
         return devices
     finally:

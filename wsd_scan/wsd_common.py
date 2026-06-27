@@ -378,7 +378,7 @@ def parse(ws_msg: etree.ElementTree):
     a = get_action_id(ws_msg)
     if a in wsd_globals.message_parsers:
         return wsd_globals.message_parsers[a](ws_msg)
-    raise NotImplemented
+    raise NotImplementedError
 
 
 def record_message_id(msg_id: str) \
