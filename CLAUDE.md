@@ -37,7 +37,7 @@ Key WSD concepts: WS-Discovery (UDP multicast device discovery), WS-Transfer (Ge
 wsd_scan/                        — Python package (pip-installable)
   __init__.py                    — Package marker
   __main__.py                    — Enables `python -m wsd_scan`
-  cli.py                         — CLI entry point (argparse: start -t TARGET -s SELF_IP)
+  cli.py                         — CLI entry point (argparse: start, list-devices, list-profiles, test-connection)
   wsd_scan__events.py            — HTTP listener, event handlers, device_initiated_scan_worker, subscription logic
   wsd_scan__operations.py        — WS-Scan operations: GetScannerElements, CreateScanJob, RetrieveImage, ValidateScanTicket
   wsd_scan__parsers.py           — XML response parsers for scanner elements, tickets, job status
@@ -57,7 +57,7 @@ wsd_scan/                        — Python package (pip-installable)
     scan_profile_*.yaml          — Scan profiles (LQ, HQ, grayscale, JPEG): color, format, quality, resolution, input_src, paper_size
     mail_service.yaml            — SMTP credentials (sender, recipient, server, user, password)
   templates/                     — 17 XML SOAP request templates (ws-scan__*, ws-eventing__*, ws-discovery__*, ws-transfer__*)
-tests/                           — Development test scripts (probe_device, test_discovery, test_subscribe, test_e2e, test_pkg)
+tests/                           — Unit tests (test_unit.py: profiles, templates, structures) + dev scripts (probe_device, test_discovery, test_subscribe, test_e2e — require physical device)
 scans/.gitignore                 — Scan output directory (created at runtime)
 pyproject.toml                   — Package metadata, entry point: wsd-scan = wsd_scan.cli:main
 requirements.txt                 — Pinned dependencies
@@ -94,6 +94,10 @@ uninstall.sh                     — Reads .install-record, undoes the install
 
 # Manual install (editable, from repo root, no systemd)
 pip install -e .
+
+# Run tests (no device required)
+pip install -e ".[dev]"
+pytest
 
 # Run (installed as console script)
 wsd-scan start -t http://192.168.0.149:8018/wsd -s 192.168.0.110
@@ -155,11 +159,10 @@ Phase 3 — Daemon and production readiness (DONE):
 - Profile hot-reload without restart
 - Unsubscribe on shutdown
 
-Phase 4 — Polish:
+Phase 4 — Polish (DONE):
 - CLI improvements (list devices, list profiles, test connection)
 - README rewrite with setup instructions
-- Tests
-- Optional: web UI for profile management
+- Tests (unit tests for profiles, templates, structures — no device required)
 
 ## Conventions
 

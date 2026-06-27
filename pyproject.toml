@@ -19,6 +19,9 @@ dependencies = [
     "secure-smtplib",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [project.scripts]
 wsd-scan = "wsd_scan.cli:main"
 
@@ -27,3 +30,6 @@ packages = ["wsd_scan"]
 
 [tool.setuptools.package-data]
 wsd_scan = ["templates/*.xml", "profiles/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -174,6 +174,76 @@ def start_server(port=DEFAULT_PORT):
     server.serve_forever()
 
 
+def list_devices(args):
+    logger.info("Scanning for WSD devices on the network (timeout %ds)...", args.timeout)
+    scanners = wsd_discovery__operations.auto_discover_scanners(timeout=args.timeout)
+    if not scanners:
+        print("No WSD scanners found.")
+        return
+    print("Found %d scanner(s):" % len(scanners))
+    for i, s in enumerate(scanners):
+        print("  [%d] %s" % (i, s.ep_ref_addr))
+        if s.xaddrs:
+            print("      XAddrs: %s" % ', '.join(s.xaddrs))
+
+
+def list_profiles(args):
+    profiles = read_profiles_from_yaml()
+    if not profiles:
+        print("No profiles found.")
+        return
+    print("Loaded %d profile(s):" % len(profiles))
+    for p in profiles:
+        print()
+        print("  ID:          %s" % p.get("id", "?"))
+        print("  Name:        %s" % p.get("name", "?"))
+        print("  Format:      %s" % p.get("format", "?"))
+        print("  Resolution:  %s dpi" % p.get("resolution", "?"))
+        print("  Color:       %s" % p.get("color", "?"))
+        print("  Input src:   %s" % p.get("input_src", "?"))
+        print("  Paper size:  %s" % p.get("paper_size", "?"))
+        print("  Target dir:  %s" % p.get("target_folder", "?"))
+        print("  PDF:         %s" % p.get("use_pdf", "?"))
+        print("  Email:       %s" % p.get("send_email", "?"))
+
+
+def test_connection(args):
+    if not args.target:
+        logger.error("--target is required for test-connection.")
+        return
+    logger.info("Probing %s ...", args.target)
+    target_service = wsd_discovery__operations.get_device(args.target)
+    if target_service is None:
+        print("FAILED: Device not found at %s" % args.target)
+        return
+    print("Device found: %s" % target_service.ep_ref_addr)
+    if target_service.xaddrs:
+        print("XAddrs: %s" % ', '.join(target_service.xaddrs))
+    try:
+        result = wsd_transfer__operations.wsd_get(target_service)
+    except StopIteration:
+        print("FAILED: Device did not respond to WS-Transfer Get. It may need a reboot.")
+        return
+    if result is False:
+        print("FAILED: Device did not respond to WS-Transfer Get.")
+        return
+    (target_info, hosted_services) = result
+    print()
+    print(target_info)
+    print("Hosted services:")
+    for hs in hosted_services:
+        if "wscn:ScannerServiceType" in hs.types:
+            print("  [SCANNER] %s" % hs.ep_ref_addr)
+        else:
+            print("  [other]   %s (%s)" % (hs.ep_ref_addr, ', '.join(hs.types)))
+    has_scanner = any("wscn:ScannerServiceType" in hs.types for hs in hosted_services)
+    print()
+    if has_scanner:
+        print("OK: Device has a scanner service. Ready for 'wsd-scan start'.")
+    else:
+        print("WARNING: Device has no scanner service.")
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -198,6 +268,21 @@ def main():
     start_parser.add_argument('-d', '--debug', action="store_true", default=False,
                               help="Enable debug output (SOAP exchanges)")
     start_parser.set_defaults(func=start)
+
+    # list-devices: discover WSD scanners on the network
+    ld_parser = subparsers.add_parser("list-devices", help="Discover WSD scanners on the local network")
+    ld_parser.add_argument('--timeout', action="store", type=int, default=5,
+                           help="Discovery timeout in seconds (default: 5)")
+    ld_parser.set_defaults(func=list_devices)
+
+    # list-profiles: show loaded scan profiles
+    subparsers.add_parser("list-profiles", help="List available scan profiles").set_defaults(func=list_profiles)
+
+    # test-connection: probe a device and verify it has a scanner service
+    tc_parser = subparsers.add_parser("test-connection", help="Test connection to a WSD scanner")
+    tc_parser.add_argument('-t', '--target', action="store", required=True, type=str,
+                           help="WSD endpoint URL of the scanner (e.g. http://192.168.0.149:8018/wsd)")
+    tc_parser.set_defaults(func=test_connection)
 
     args = parser.parse_args()
     args.func(args)
