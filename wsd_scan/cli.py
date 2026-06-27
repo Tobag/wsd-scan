@@ -82,6 +82,11 @@ def start(args):
         if target_service is None:
             logger.error("Device not found at %s", args.target)
             return
+        # Use the provided URL directly for transport — the device may
+        # advertise XAddrs (e.g. secondary interfaces) that are unreachable,
+        # causing timeouts. We know this URL works; don't let the probe
+        # response override it.
+        target_service.xaddrs = {args.target}
 
     logger.info("Device found. Getting metadata...")
     try:
