@@ -2,6 +2,7 @@
 # -*- encoding: utf-8 -*-
 
 import email
+import logging
 import typing
 from io import BytesIO
 
@@ -9,13 +10,15 @@ import lxml.etree as etree
 import requests
 from PIL import Image, ImageSequence
 
-import wsd_common, \
+from . import wsd_common, \
     wsd_discovery__operations, \
     wsd_scan__parsers, \
     wsd_scan__structures, \
     wsd_transfer__operations, \
     wsd_transfer__structures, \
     wsd_globals
+
+logger = logging.getLogger("wsd_scan")
 
 
 def wsd_get_scanner_elements(hosted_scan_service: wsd_transfer__structures.HostedService):
@@ -118,6 +121,11 @@ def wsd_create_scan_job(hosted_scan_service: wsd_transfer__structures.HostedServ
     x = wsd_common.submit_request({hosted_scan_service.ep_ref_addr},
                                   "ws-scan__create_scan_job.xml",
                                   {**fields, **tkt.as_map()})
+
+    if wsd_common.check_fault(x):
+        subcode = wsd_common.get_xml_str(x, ".//soap:Subcode/soap:Value")
+        reason = wsd_common.get_xml_str(x, ".//soap:Reason/soap:Text")
+        raise RuntimeError("CreateScanJob rejected: %s — %s" % (subcode, reason))
 
     x = wsd_common.xml_find(x, ".//sca:CreateScanJobResponse")
 
@@ -251,7 +259,7 @@ def wsd_retrieve_image(hosted_scan_service: wsd_transfer__structures.HostedServi
     :rtype: (int, list[PIL.Image])
     """
 
-    data = wsd_common.message_from_file(wsd_common.abs_path("./templates/ws-scan__retrieve_image.xml"),
+    data = wsd_common.message_from_file(wsd_common.abs_path("templates/ws-scan__retrieve_image.xml"),
                                         FROM=wsd_globals.urn,
                                         TO=hosted_scan_service.ep_ref_addr,
                                         JOB_ID=job.id,
@@ -260,8 +268,8 @@ def wsd_retrieve_image(hosted_scan_service: wsd_transfer__structures.HostedServi
 
     if wsd_globals.debug:
         r = etree.fromstring(data.encode("ASCII"), parser=wsd_common.parser)
-        print('##\n## RETRIEVE IMAGE REQUEST\n##\n')
-        print(etree.tostring(r, pretty_print=True, xml_declaration=True).decode("ASCII"))
+        logger.debug("##\n## RETRIEVE IMAGE REQUEST\n##\n%s",
+                     etree.tostring(r, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
     r = requests.post(hosted_scan_service.ep_ref_addr, headers=wsd_common.headers, data=data)
 
@@ -290,10 +298,10 @@ def wsd_retrieve_image(hosted_scan_service: wsd_transfer__structures.HostedServi
         ls = list(m.walk())
 
         if wsd_globals.debug:
-            print('##\n## RETRIEVE IMAGE RESPONSE\n##\n%s\n' % ls[1])
+            logger.debug("##\n## RETRIEVE IMAGE RESPONSE\n##\n%s", ls[1])
 
         img = Image.open(BytesIO(ls[2].get_payload(decode=True)))
-        print("%s %s %s" % (img.format, img.size, img.mode))
+        logger.info("Image received: %s %s %s", img.format, img.size, img.mode)
 
         return img
 

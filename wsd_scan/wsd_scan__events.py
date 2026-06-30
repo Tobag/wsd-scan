@@ -3,6 +3,7 @@
 
 import copy
 import http.server
+import logging
 import queue
 import threading
 import typing
@@ -12,14 +13,16 @@ import img2pdf as img2pdf
 import lxml.etree as etree
 from PIL import Image
 
-import mail_service
-import wsd_common
-import wsd_eventing__operations
-import wsd_globals
-import wsd_scan__operations
-import wsd_scan__parsers
-import wsd_transfer__structures
-import xml_helpers
+from . import mail_service
+from . import wsd_common
+from . import wsd_eventing__operations
+from . import wsd_globals
+from . import wsd_scan__operations
+from . import wsd_scan__parsers
+from . import wsd_transfer__structures
+from . import xml_helpers
+
+logger = logging.getLogger("wsd_scan")
 
 token_map = {}
 host_map = {}
@@ -299,21 +302,24 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_scan_available_event(xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## SCAN AVAILABLE EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("SCAN AVAILABLE EVENT\n%s",
+                         etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
         client_context = wsd_common.xml_find(xml_tree, ".//sca:ClientContext").text
         scan_identifier = wsd_common.xml_find(xml_tree, ".//sca:ScanIdentifier").text
+        input_source_el = wsd_common.xml_find(xml_tree, ".//sca:InputSource")
+        input_source = input_source_el.text if input_source_el is not None else None
+        logger.info("Scan requested: context=%s source=%s", client_context, input_source)
         t = threading.Thread(target=device_initiated_scan_worker,
                              args=(client_context,
                                    scan_identifier,
-                                   "scan-" + datetime.now().strftime("%Y-%m-%d_%H_%M_%S")))
+                                   "scan-" + datetime.now().strftime("%Y-%m-%d_%H_%M_%S"),
+                                   input_source))
         t.start()
 
     @staticmethod
     def handle_scanner_elements_change_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## SCANNER ELEMENTS CHANGE EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("SCANNER ELEMENTS CHANGE EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
         sca_config = wsd_common.xml_find(xml_tree, ".//sca:ScannerConfiguration")
         sca_descr = wsd_common.xml_find(xml_tree, ".//sca:ScannerDescription")
@@ -330,8 +336,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_scanner_status_summary_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## SCANNER STATUS SUMMARY EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("SCANNER STATUS SUMMARY EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
         state = wsd_common.xml_find(xml_tree, ".//sca:ScannerState").text
         reasons = []
@@ -345,8 +350,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_scanner_status_condition_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## SCANNER STATUS CONDITION EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("SCANNER STATUS CONDITION EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
         cond = wsd_common.xml_find(xml_tree, ".//sca:DeviceCondition")
         cond = wsd_scan__parsers.parse_scanner_condition(cond)
@@ -355,8 +359,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_scanner_status_condition_cleared_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## SCANNER STATUS CONDITION CLEARED EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("SCANNER STATUS CONDITION CLEARED EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
         cond = wsd_common.xml_find(xml_tree, ".//sca:DeviceConditionCleared")
         cond_id = int(wsd_common.xml_find(cond, ".//sca:ConditionId").text)
@@ -366,16 +369,14 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
     @staticmethod
     def handle_job_status_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## JOB STATUS EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("JOB STATUS EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
             s = wsd_common.xml_find(xml_tree, ".//sca:JobStatus")
             queues.sc_job_status_q.put(wsd_scan__parsers.parse_job_status(s))
 
     @staticmethod
     def handle_job_end_state_event(queues, xml_tree):
         if wsd_globals.debug is True:
-            print('##\n## JOB END STATE EVENT\n##\n')
-            print(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True))
+            logger.debug("JOB END STATE EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
             s = wsd_common.xml_find(xml_tree, ".//sca:JobEndState")
             queues.sc_job_ended_q.put(wsd_scan__parsers.parse_job_summary(s))
 
@@ -475,34 +476,36 @@ class WSDScannerMonitor:
 
     def get_active_jobs(self):
         while self.queues.job_status_q.empty() is not True:
-            status = self.queues.sc_cond_q.get()
+            status = self.queues.job_status_q.get()
             if status.id not in self.active_jobs.keys():
                 self.active_jobs[status.id] = wsd_scan__operations.wsd_get_job_elements(self.service, status.id)
             else:
                 self.active_jobs[status.id][0] = status
             self.queues.job_status_q.task_done()
         while self.queues.job_ended_q.empty() is not True:
-            summary = self.queues.sc_cond_q.get()
-            del self.active_jobs[summary.status.id]
+            summary = self.queues.job_ended_q.get()
+            if summary.status.id in self.active_jobs:
+                del self.active_jobs[summary.status.id]
             self.job_history[summary.status.id] = summary
             self.queues.job_ended_q.task_done()
         return self.active_jobs
 
     def get_job_history(self):
         while self.queues.job_ended_q.empty() is not True:
-            summary = self.queues.sc_cond_q.get()
-            del self.active_jobs[summary.status.id]
+            summary = self.queues.job_ended_q.get()
+            if summary.status.id in self.active_jobs:
+                del self.active_jobs[summary.status.id]
             self.job_history[summary.status.id] = summary
             self.queues.job_ended_q.task_done()
         return self.job_history
 
     def scanner_description_has_changed(self):
         """
-        Check if the scanner status has been updated since last get_scanner_description() call
+        Check if the scanner description has been updated since last get_scanner_description() call
 
         :return: True if the scanner description has changed, False otherwise
         """
-        return not self.queues.sc_cond_q.empty()
+        return not self.queues.sc_descr_q.empty()
 
     def scanner_configuration_has_changed(self):
         """
@@ -542,7 +545,8 @@ class WSDScannerMonitor:
 
 def device_initiated_scan_worker(client_context: str,
                                  scan_identifier: str,
-                                 file_name: str):
+                                 file_name: str,
+                                 input_source: str = None):
     """
     Reply to a ScanAvailable event by issuing the creation of a new scan job.
     Waits for job completion and writes the output to files.
@@ -553,6 +557,8 @@ def device_initiated_scan_worker(client_context: str,
     :type scan_identifier: str
     :param file_name: the prefix name of the files to write.
     :type file_name: str
+    :param input_source: the input source from the ScanAvailableEvent (e.g. "Platen", "ADF")
+    :type input_source: str
     """
     host = host_map[client_context]
     dest_token = token_map[client_context]
@@ -561,11 +567,13 @@ def device_initiated_scan_worker(client_context: str,
 
     std_ticket.override_params(profile)
 
-    platen_fallback = False
-    # for auto input we try ADF first and use Platen as a fallback
-    if std_ticket.doc_params.input_src == "Auto":
+    # Use the input source from the ScanAvailableEvent if provided.
+    # The device knows what's available (paper in ADF vs Platen).
+    # Fall back to the profile's input_src if the event doesn't specify.
+    if input_source is not None:
+        std_ticket.doc_params.input_src = input_source
+    elif std_ticket.doc_params.input_src == "Auto":
         std_ticket.doc_params.input_src = "ADF"
-        platen_fallback = True
 
     save_format = profile["image_format"]
 
@@ -574,37 +582,48 @@ def device_initiated_scan_worker(client_context: str,
 
     more_images_available = True
 
-    while more_images_available:
-        job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
-        img = wsd_scan__operations.wsd_retrieve_image(host, job, file_name)
+    try:
+        while more_images_available:
+            try:
+                job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
+            except RuntimeError as e:
+                logger.error("CreateScanJob failed: %s", e)
+                break
+            except StopIteration:
+                logger.error("CreateScanJob: device did not respond. Aborting scan.")
+                break
 
-        if img == Image.NONE:
-            if platen_fallback:
-                std_ticket.doc_params.input_src = "Platen"
-                continue
-            else:
+            try:
+                img = wsd_scan__operations.wsd_retrieve_image(host, job, file_name)
+            except Exception as e:
+                logger.error("RetrieveImage failed: %s", e)
+                break
+
+            if img == Image.NONE:
                 more_images_available = False
                 break
 
-        picture_file = "%s/%s_%d.%s" % (profile["target_folder"], file_name, image_id, save_format)
-        img.save(picture_file, format=save_format, quality=profile["quality"])
-        picture_files.append(picture_file)
-        image_id += 1
+            picture_file = "%s/%s_%d.%s" % (profile["target_folder"], file_name, image_id, save_format)
+            img.save(picture_file, format=save_format, quality=profile["quality"])
+            logger.info("Saved: %s", picture_file)
+            picture_files.append(picture_file)
+            image_id += 1
 
-        # Try again with platen only once
-        if platen_fallback:
-            platen_fallback = False
-        # Only check for more images if the ADF is used
-        elif std_ticket.doc_params.input_src == "Platen":
-            more_images_available = False
+            # Only check for more images if the ADF is used
+            if std_ticket.doc_params.input_src == "Platen":
+                more_images_available = False
 
-    if profile["use_pdf"]:
-        pdf_file_name = "%s/%s.pdf" % (profile["target_folder"], file_name)
-        with open(pdf_file_name, "wb") as f:
-            f.write(img2pdf.convert(picture_files))
-        attachments = [pdf_file_name]
-    else:
-        attachments = picture_files
+        if picture_files and profile["use_pdf"]:
+            pdf_file_name = "%s/%s.pdf" % (profile["target_folder"], file_name)
+            with open(pdf_file_name, "wb") as f:
+                f.write(img2pdf.convert(picture_files))
+            logger.info("Saved PDF: %s", pdf_file_name)
+            attachments = [pdf_file_name]
+        else:
+            attachments = picture_files
 
-    if profile["send_email"]:
-        mail_service.MailService().sendMaiWithScannedDocuments(attachments)
+        if profile["send_email"] and attachments:
+            mail_service.MailService().sendMaiWithScannedDocuments(attachments)
+
+    except Exception as e:
+        logger.error("Scan worker error: %s", e)

@@ -3,7 +3,7 @@
 
 import copy
 
-import wsd_common, \
+from . import wsd_common, \
     wsd_scan__structures
 
 

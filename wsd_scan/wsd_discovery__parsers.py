@@ -2,13 +2,15 @@ import typing
 
 from lxml import etree
 
-import wsd_common, \
+from . import wsd_common, \
     wsd_discovery__structures
 
 
 def get_sequence(xml_tree: etree.ElementTree) -> typing.List[int]:
     q = wsd_common.xml_find(xml_tree, ".//wsd:AppSequence")
     seq = [0, 0, 0]
+    if q is None:
+        return seq
     seq[0] = int(q.attrib['InstanceId'])
     if 'SequenceId' in q.attrib:
         seq[1] = int(q.attrib['SequenceId'])

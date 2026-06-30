@@ -1,0 +1,19 @@
+[Unit]
+Description=WSD Push-Scan Receiver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+#@SYSTEM User=__USER__
+ExecStart=__EXEC__ start -t __TARGET__ -s __SELF_IP__ -p __PORT__
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+#@SYSTEM NoNewPrivileges=true
+#@SYSTEM ProtectSystem=full
+#@SYSTEM ProtectHome=read-only
+#@SYSTEM ReadWritePaths=__SCAN_DIR__
+
+[Install]
+WantedBy=__WANTED_BY__

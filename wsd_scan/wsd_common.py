@@ -2,16 +2,19 @@
 # -*- encoding: utf-8 -*-
 
 import datetime
+import logging
 import os
 import random
 import time
 import typing
 import uuid
 
+logger = logging.getLogger("wsd_scan")
+
 import lxml.etree as etree
 import requests
 
-import wsd_globals
+from . import wsd_globals
 
 NSMAP = {"soap": "http://www.w3.org/2003/05/soap-envelope",
          "mex": "http://schemas.xmlsoap.org/ws/2004/09/mex",
@@ -26,7 +29,7 @@ NSMAP = {"soap": "http://www.w3.org/2003/05/soap-envelope",
          "df": "http://schemas.microsoft.com/windows/2008/09/devicefoundation"}
 
 headers = {'user-agent': 'WSDAPI', 'content-type': 'application/soap+xml'}
-log_path = "../log"
+log_path = None
 
 parser = etree.XMLParser(remove_blank_text=True)
 
@@ -106,19 +109,23 @@ def soap_post_unicast(addr: str,
     min_delay = 50
     max_delay = 250
     upper_delay = 500
-    try:
-        repeat = 2
-        t = random.uniform(min_delay, max_delay)
-        while repeat:
-            try:
-                return requests.post(addr, headers=headers, data=data, timeout=100).content
-            except requests.Timeout:
-                time.sleep(t / 1000.0)
-                t = t * 2 if t * 2 < upper_delay else upper_delay
-                repeat -= 1
-        return None
-    except requests.ConnectionError:
-        return None
+    repeat = 2
+    t = random.uniform(min_delay, max_delay)
+    while repeat:
+        try:
+            return requests.post(addr, headers=headers, data=data, timeout=100).content
+        except requests.Timeout:
+            logger.warning("Request to %s timed out (%d retries left)", addr, repeat - 1)
+            time.sleep(t / 1000.0)
+            t = t * 2 if t * 2 < upper_delay else upper_delay
+            repeat -= 1
+        except requests.ConnectionError as e:
+            logger.warning("Connection error to %s: %s (%d retries left)", addr, e, repeat - 1)
+            time.sleep(t / 1000.0)
+            t = t * 2 if t * 2 < upper_delay else upper_delay
+            repeat -= 1
+    logger.error("All retries exhausted for %s", addr)
+    return None
 
 
 def submit_request(addrs: typing.Set[str],
@@ -145,9 +152,8 @@ def submit_request(addrs: typing.Set[str],
 
     if wsd_globals.debug:
         r = etree.fromstring(data.encode("ASCII"), parser=parser)
-        print('##\n## %s REQUEST\n##\n' % op_name)
-        log_xml(r)
-        print(etree.tostring(r, pretty_print=True, xml_declaration=True).decode("ASCII"))
+        logger.debug("##\n## %s REQUEST\n##\n%s", op_name,
+                     etree.tostring(r, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
     for addr in addrs:
         # TODO: handle ipv6 link-local addresses, remember to specify interface in URI
@@ -159,9 +165,8 @@ def submit_request(addrs: typing.Set[str],
         x = etree.fromstring(r)
 
         if wsd_globals.debug:
-            print('##\n## %s RESPONSE\n##\n' % op_name)
-            log_xml(x)
-            print(etree.tostring(x, pretty_print=True, xml_declaration=True).decode("ASCII"))
+            logger.debug("##\n## %s RESPONSE\n##\n%s", op_name,
+                         etree.tostring(x, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
         return x
 
@@ -184,11 +189,8 @@ def check_fault(x: etree.ElementTree) \
         reason = get_xml_str(x, ".//soap:Reason/soap:Text")
         detail = get_xml_str(x, ".//soap:Detail")
         if wsd_globals.debug:
-            print('##\n## FAULT\n##\n')
-            print("Code: %s\n" % code)
-            print("Subcode: %s\n" % subcode)
-            print("Reason: %s\n" % reason)
-            print("Details: %s\n" % detail)
+            logger.debug("##\n## FAULT\n##\nCode: %s\nSubcode: %s\nReason: %s\nDetails: %s",
+                         code, subcode, reason, detail)
         return True
     else:
         return False
@@ -376,7 +378,7 @@ def parse(ws_msg: etree.ElementTree):
     a = get_action_id(ws_msg)
     if a in wsd_globals.message_parsers:
         return wsd_globals.message_parsers[a](ws_msg)
-    raise NotImplemented
+    raise NotImplementedError
 
 
 def record_message_id(msg_id: str) \
@@ -405,7 +407,8 @@ def log_xml(xml_tree: etree.ElementTree) \
     :param xml_tree: the node to dump
     :type xml_tree: etree.ElementTree
     """
-    #logfile = open(log_path + "/" + datetime.datetime.now().isoformat(), "w")
+    if log_path is None:
+        return
     logfile = open(log_path + "/test.log", "w")
     logfile.write(etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
 
@@ -424,7 +427,8 @@ def enable_debug(status: bool = True) \
 #######################
 
 wsd_globals.urn = gen_urn()
-try:
-    os.mkdir(log_path)
-except FileExistsError:
-    pass
+if log_path is not None:
+    try:
+        os.mkdir(log_path)
+    except FileExistsError:
+        pass
