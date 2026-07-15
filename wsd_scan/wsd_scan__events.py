@@ -258,13 +258,39 @@ class HTTPServerWithContext(http.server.HTTPServer):
 
 class RequestHandler(http.server.BaseHTTPRequestHandler):
 
+    def _read_body(self, request_headers):
+        # Some devices POST their event notifications with a chunked
+        # Transfer-Encoding and no Content-Length. Read the body accordingly
+        # instead of assuming Content-Length is always present.
+        length_header = request_headers.get("content-length")
+        if length_header is not None:
+            return self.rfile.read(int(length_header))
+
+        transfer_encoding = request_headers.get("transfer-encoding", "")
+        if "chunked" in transfer_encoding.lower():
+            chunks = []
+            while True:
+                size_line = self.rfile.readline().strip()
+                if not size_line:
+                    continue
+                chunk_size = int(size_line.split(b";")[0], 16)
+                if chunk_size == 0:
+                    self.rfile.readline()  # consume trailing CRLF / trailers
+                    break
+                chunks.append(self.rfile.read(chunk_size))
+                self.rfile.read(2)  # consume CRLF after each chunk
+            return b"".join(chunks)
+
+        logger.warning("POST with neither Content-Length nor chunked "
+                       "Transfer-Encoding; assuming empty body")
+        return b""
+
     def do_POST(self):
         context = self.server.context
         # request_path = self.path
         request_headers = self.headers
-        length = int(request_headers["content-length"])
 
-        message = self.rfile.read(length)
+        message = self._read_body(request_headers)
 
         self.protocol_version = "HTTP/1.1"
         self.send_response(202)
@@ -371,14 +397,14 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         if wsd_globals.debug is True:
             logger.debug("JOB STATUS EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
             s = wsd_common.xml_find(xml_tree, ".//sca:JobStatus")
-            queues.sc_job_status_q.put(wsd_scan__parsers.parse_job_status(s))
+            queues.job_status_q.put(wsd_scan__parsers.parse_job_status(s))
 
     @staticmethod
     def handle_job_end_state_event(queues, xml_tree):
         if wsd_globals.debug is True:
             logger.debug("JOB END STATE EVENT\n%s", etree.tostring(xml_tree, pretty_print=True, xml_declaration=True).decode("ASCII"))
             s = wsd_common.xml_find(xml_tree, ".//sca:JobEndState")
-            queues.sc_job_ended_q.put(wsd_scan__parsers.parse_job_summary(s))
+            queues.job_ended_q.put(wsd_scan__parsers.parse_job_summary(s))
 
 
 # TODO: implement multi-device simultaneous monitoring
