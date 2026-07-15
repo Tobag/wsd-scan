@@ -281,27 +281,39 @@ def wsd_retrieve_image(hosted_scan_service: wsd_transfer__structures.HostedServi
             if e == "wscn:ClientErrorNoImagesAvailable":
                 return Image.NONE
     except etree.ParseError:
-        boundaryValue = ""
-        msgHeaders = r.headers['Content-Type'].split(";")
-        for msgHeader in msgHeaders:
-            msgHeaderParts = msgHeader.split("=")
-            if msgHeaderParts[0] == "boundary":
-                boundaryValue = msgHeaderParts[1]
+        # Multipart/related response carrying the scanned image. Extract the
+        # binary image part with a byte-exact split on the MIME boundary.
+        #
+        # Do NOT route the payload through email.message_from_bytes: its
+        # text-oriented feed parser normalizes line endings (CRLF -> LF) on the
+        # part body, which silently deletes bytes from a raw JPEG (its entropy
+        # stream is full of incidental 0x0D0A pairs). The SOI/EOI framing
+        # survives so PIL still "opens" the result, but every byte after the
+        # first mangled CRLF is shifted -> the image decodes correctly for the
+        # first rows and then degrades into a solid colour band. Splitting on the
+        # boundary in raw bytes preserves the payload exactly.
+        boundary = ""
+        for msgHeader in r.headers.get('Content-Type', '').split(";"):
+            parts = msgHeader.split("=", 1)
+            if parts[0].strip().lower() == "boundary" and len(parts) == 2:
+                boundary = parts[1].strip().strip('"')
                 break
+        if not boundary:
+            raise RuntimeError("RetrieveImage: multipart response has no boundary")
 
-        boundaryValueBytes = ("--"+boundaryValue).encode("utf-8")
-        boundaryValueBytesWithLineBreak = ("\r\n--"+boundaryValue).encode("utf-8")
+        delim = ("--" + boundary).encode("ascii")
+        for segment in r.content.split(delim):
+            sep = segment.find(b"\r\n\r\n")
+            if sep == -1:
+                continue  # preamble, epilogue, or closing "--" delimiter
+            part_headers = segment[:sep].lower()
+            body = segment[sep + 4:]
+            if body.endswith(b"\r\n"):  # CRLF framing before the next boundary
+                body = body[:-2]
+            if b"image/" in part_headers or body[:2] == b"\xff\xd8":
+                img = Image.open(BytesIO(body))
+                logger.info("Image received: %s %s %s", img.format, img.size, img.mode)
+                return img
 
-        content_with_header = b'MIME-Version: 1.0\r\nContent-type: ' + r.headers['Content-Type'].encode('ascii') + b'\r\n' + r.content.replace(boundaryValueBytes, boundaryValueBytesWithLineBreak)
-        m = email.message_from_bytes(content_with_header)
-
-        ls = list(m.walk())
-
-        if wsd_globals.debug:
-            logger.debug("##\n## RETRIEVE IMAGE RESPONSE\n##\n%s", ls[1])
-
-        img = Image.open(BytesIO(ls[2].get_payload(decode=True)))
-        logger.info("Image received: %s %s %s", img.format, img.size, img.mode)
-
-        return img
+        raise RuntimeError("RetrieveImage: no image part in multipart response")
 

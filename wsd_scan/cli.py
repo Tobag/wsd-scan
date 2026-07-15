@@ -13,6 +13,7 @@ from . import wsd_globals
 from . import wsd_scan__events
 from . import wsd_transfer__operations
 from . import wsd_discovery__parsers
+from . import wsd_discovery__structures
 from . import wsd_eventing__operations
 
 logger = logging.getLogger("wsd_scan")
@@ -78,10 +79,22 @@ def start(args):
             return
         logger.info("Target: %s", args.target)
         logger.info("Discovering device...")
-        target_service = wsd_discovery__operations.get_device(args.target)
+        target_service = None
+        try:
+            target_service = wsd_discovery__operations.get_device(args.target)
+        except Exception as e:
+            logger.info("Direct WS-Discovery probe of %s failed (%s).", args.target, e)
         if target_service is None:
-            logger.error("Device not found at %s", args.target)
-            return
+            # Some scanners do not answer a WS-Discovery Probe sent as an HTTP POST
+            # to their scan endpoint (they respond to Probe only over UDP), so
+            # get_device() returns nothing or errors out. Fall back to addressing
+            # the supplied URL directly. A few devices reject a bare URL as the
+            # wsa:To with wsa:DestinationUnreachable and require their real endpoint
+            # reference (a urn:uuid); pass it via --endpoint-reference in that case
+            # (it can be read from a UDP WS-Discovery ProbeMatch).
+            logger.info("No probe response; addressing the target URL directly.")
+            target_service = wsd_discovery__structures.TargetService()
+            target_service.ep_ref_addr = args.endpoint_reference or args.target
         # Use the provided URL directly for transport — the device may
         # advertise XAddrs (e.g. secondary interfaces) that are unreachable,
         # causing timeouts. We know this URL works; don't let the probe
@@ -266,6 +279,10 @@ def main():
                                    "Required unless --auto is used.")
     start_parser.add_argument('-s', '--self', action="store", required=True, type=str,
                               help="Local IP the scanner can reach (e.g. 192.168.0.110)")
+    start_parser.add_argument('-e', '--endpoint-reference', action="store", default=None, type=str,
+                              help="Device endpoint reference (a urn:uuid) to use as wsa:To when the "
+                                   "scanner does not answer an HTTP probe and rejects a bare URL. Read it "
+                                   "from a UDP WS-Discovery ProbeMatch. Only needed with --target.")
     start_parser.add_argument('-p', '--port', action="store", type=int, default=DEFAULT_PORT,
                               help="HTTP listener port (default: %d)" % DEFAULT_PORT)
     start_parser.add_argument('--auto', action="store_true", default=False,
