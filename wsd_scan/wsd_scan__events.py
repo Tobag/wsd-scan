@@ -28,6 +28,21 @@ token_map = {}
 host_map = {}
 profile_map = {}
 
+# Number of scan workers currently transferring images (cli waits for them before it exits to re-subscribe).
+_active_scans = 0
+_active_lock = threading.Lock()
+
+
+def active_scans():
+    with _active_lock:
+        return _active_scans
+
+
+def _count_scan(delta):
+    global _active_scans
+    with _active_lock:
+        _active_scans += delta
+
 
 def wsd_scanner_all_events_subscribe(hosted_scan_service: wsd_transfer__structures.HostedService,
                                      notify_addr: str,
@@ -586,6 +601,14 @@ def device_initiated_scan_worker(client_context: str,
     :param input_source: the input source from the ScanAvailableEvent (e.g. "Platen", "ADF")
     :type input_source: str
     """
+    _count_scan(1)
+    try:
+        _scan_worker(client_context, scan_identifier, file_name, input_source)
+    finally:
+        _count_scan(-1)
+
+
+def _scan_worker(client_context, scan_identifier, file_name, input_source=None):
     host = host_map[client_context]
     dest_token = token_map[client_context]
     profile = profile_map[client_context]

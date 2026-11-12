@@ -20,6 +20,46 @@ logger = logging.getLogger("wsd_scan")
 
 DEFAULT_PORT = 6666
 
+# Keeping the panel entries alive: devices grant subscriptions for a limited time (PT1H). Instead of
+# re-subscribing from scratch (creates new panel entries and, according to docs/SAMSUNG-M288X-QUIRKS.md,
+# can crash the device), every subscription is renewed with WS-Eventing Renew. If the subscriptions are
+# gone (device restarted or unreachable), the process unsubscribes and exits with a non-zero code so the
+# service manager (systemd Restart=on-failure, Docker restart policy) starts it again and it subscribes
+# afresh. If the device does not support Renew at all, it exits the same way shortly before expiry.
+# Exit codes: 2 = subscribe failed, 3 = subscriptions lost, 4 = planned re-subscribe (no Renew support).
+RENEW_INTERVAL_S = int(os.environ.get("WSD_SCAN_RENEW_S", "300"))
+RENEW_EXPIRES = os.environ.get("WSD_SCAN_RENEW_EXPIRES", "PT1H")
+RESUBSCRIBE_S = int(os.environ.get("WSD_SCAN_RESUBSCRIBE_S", "3300"))
+SCAN_WAIT_S = int(os.environ.get("WSD_SCAN_WAIT_FOR_SCANS_S", "300"))
+
+
+def _renew_all(hosted_service, subscription_ids):
+    """Renew every subscription. Returns "ok", "fault" or "unreachable"."""
+    for sub_id in subscription_ids:
+        try:
+            if not wsd_eventing__operations.wsd_renew(hosted_service, sub_id, RENEW_EXPIRES):
+                return "fault"
+        except Exception as e:
+            logger.warning("Renew of %s failed: %s", sub_id, e)
+            return "unreachable"
+    return "ok"
+
+
+def _subscription_alive(hosted_service, sub_id):
+    """True if the device still knows the subscription, False if not, None if the device is unreachable."""
+    try:
+        return wsd_eventing__operations.wsd_get_status(hosted_service, sub_id) is not False
+    except Exception as e:
+        logger.warning("GetStatus failed: %s", e)
+        return None
+
+
+def _wait_for_running_scans(timeout_s):
+    """Do not cut off a scan that is being transferred."""
+    end = time.monotonic() + timeout_s
+    while wsd_scan__events.active_scans() > 0 and time.monotonic() < end:
+        time.sleep(2)
+
 
 def noop(args):
     logger.info("Nothing to do")
@@ -121,13 +161,24 @@ def start(args):
 
             subscription_ids = []
 
-            def cleanup_on_exit(sig, frame):
+            def unsubscribe_all():
                 logger.info("Unsubscribing from device...")
                 for sub_id in subscription_ids:
+                    if not sub_id:
+                        continue
                     try:
                         wsd_eventing__operations.wsd_unsubscribe(hosted_service, sub_id)
                     except Exception:
                         pass
+
+            def leave(code):
+                _wait_for_running_scans(SCAN_WAIT_S)
+                unsubscribe_all()
+                logger.info("Done. Exiting (code %d).", code)
+                os._exit(code)
+
+            def cleanup_on_exit(sig, frame):
+                unsubscribe_all()
                 logger.info("Done. Exiting.")
                 os._exit(0)
 
@@ -143,20 +194,28 @@ def start(args):
             # One scan-available subscription per profile (creates panel entries)
             for profile in wsd_globals.scan_profiles:
                 client_context = profile["id"]
-                sub_id, dest_token = wsd_scan__events.wsd_scan_available_event_subscribe(hosted_service,
-                                                                       profile["name"],
-                                                                       client_context,
-                                                                       listen_addr)
+                result = wsd_scan__events.wsd_scan_available_event_subscribe(hosted_service,
+                                                                             profile["name"],
+                                                                             client_context,
+                                                                             listen_addr)
+                if not result:
+                    logger.error("Subscribe for profile %s failed; exiting so the service can retry.",
+                                 client_context)
+                    leave(2)
+                sub_id, dest_token = result
                 subscription_ids.append(sub_id)
                 if dest_token is not None:
                     wsd_scan__events.profile_map[client_context] = profile
                     wsd_scan__events.token_map[client_context] = dest_token
                     wsd_scan__events.host_map[client_context] = hosted_service
 
-            # Subscribe once, then keep the process alive.
-            # Subscriptions last 1 hour (PT1H). TODO: use WS-Eventing Renew
-            # before expiry instead of re-subscribing from scratch.
+            # Subscribe once, then keep the process alive and renew the subscriptions
+            # (they last 1 hour, PT1H) instead of re-subscribing from scratch.
             logger.info("Profiles pushed. Waiting for scan events on port %d...", port)
+            renewable = [s for s in subscription_ids if s]
+            renew_works = None          # unknown until the first Renew
+            next_renew = time.monotonic() + RENEW_INTERVAL_S
+            resubscribe_at = time.monotonic() + RESUBSCRIBE_S
 
             # Profile hot-reload: poll profiles dir for changes
             profiles_dir = wsd_common.abs_path("profiles")
@@ -164,6 +223,35 @@ def start(args):
 
             while True:
                 time.sleep(2)
+                now = time.monotonic()
+                if renew_works is not False and now >= next_renew:
+                    next_renew = now + RENEW_INTERVAL_S
+                    result = _renew_all(hosted_service, renewable)
+                    if result == "ok":
+                        if renew_works is None:
+                            logger.info("Renew accepted by the device; renewing every %d s.", RENEW_INTERVAL_S)
+                        else:
+                            logger.info("Renew ok (%d subscription(s)).", len(renewable))
+                        renew_works = True
+                    elif result == "unreachable":
+                        logger.error("Device unreachable during Renew; exiting so the service can re-subscribe.")
+                        leave(3)
+                    else:
+                        alive = _subscription_alive(hosted_service, renewable[0]) if renewable else False
+                        if alive is None:
+                            logger.error("Device unreachable after a Renew fault; exiting to re-subscribe.")
+                            leave(3)
+                        elif renew_works or alive is False:
+                            logger.warning("Subscriptions are no longer valid (device restarted?); "
+                                           "exiting to re-subscribe.")
+                            leave(3)
+                        else:
+                            logger.warning("Device rejects Renew; re-subscribing cleanly every %d s instead.",
+                                           RESUBSCRIBE_S)
+                            renew_works = False
+                if renew_works is False and now >= resubscribe_at:
+                    logger.info("Re-subscribing before the subscriptions expire (Renew not supported).")
+                    leave(4)
                 try:
                     current_mtime = os.path.getmtime(profiles_dir)
                     if current_mtime != last_mtime:
@@ -182,7 +270,8 @@ def start(args):
 
 
 def start_server_thread(port=DEFAULT_PORT):
-    t = threading.Thread(target=start_server, args=(port,))
+    # daemon: if start() fails after this point the process must end (and be restarted), not hang on the listener
+    t = threading.Thread(target=start_server, args=(port,), daemon=True)
     t.start()
 
 

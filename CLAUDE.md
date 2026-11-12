@@ -122,7 +122,9 @@ The `-t` flag is the WSD endpoint URL of the scanner. The `-s` flag is the local
 ## Known Issues and Technical Debt
 
 - Port 6666 was hardcoded; now configurable via --port (default still 6666).
-- Subscription refresh: subscribes once and waits. No WS-Eventing Renew before 1-hour expiry (TODO in cli.py).
+- Subscription refresh: subscriptions are renewed with WS-Eventing Renew (WSD_SCAN_RENEW_S). When they are
+  lost (device restart) or the device rejects Renew, the process exits non-zero and relies on the service
+  manager to restart it and subscribe afresh (see README, "Long-running service").
 - wsd_retrieve_image uses Image.NONE sentinel for no-images-available (not a real PIL constant).
 - XML templates loaded via dumb string substitution ({{PLACEHOLDER}}) not XML tree manipulation (noted as TODO in wsd_common.py).
 - Scan output dir defaults to ./scans but is configurable per-profile via target_folder in YAML (supports ~ and $HOME).

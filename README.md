@@ -99,6 +99,26 @@ List loaded profiles:
 wsd-scan list-profiles
 ```
 
+## Long-running service
+
+Devices grant the scan-available subscriptions (the panel entries) for one hour.
+`wsd-scan start` renews them with WS-Eventing Renew, so the entries stay on the
+panel. If the subscriptions are lost, for example because the printer was
+restarted, the process waits for running scans, unsubscribes and exits with a
+non-zero code; the service manager restarts it and it subscribes again. The
+bundled systemd unit (`Restart=on-failure`) and Docker's `--restart
+unless-stopped` both do that.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `WSD_SCAN_RENEW_S` | `300` | seconds between Renew requests |
+| `WSD_SCAN_RENEW_EXPIRES` | `PT1H` | expiry requested with each Renew |
+| `WSD_SCAN_RESUBSCRIBE_S` | `3300` | devices without Renew support: exit after this many seconds to re-subscribe before expiry |
+| `WSD_SCAN_WAIT_FOR_SCANS_S` | `300` | how long to wait for a running scan before exiting |
+
+Exit codes: `2` subscribe failed, `3` subscriptions lost, `4` planned
+re-subscribe (device without Renew support).
+
 ## Email delivery
 
 To receive scanned documents as email attachments, configure SMTP credentials
