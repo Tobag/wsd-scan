@@ -629,27 +629,36 @@ def _scan_worker(client_context, scan_identifier, file_name, input_source=None):
     image_id = 0
     picture_files = []
 
-    more_images_available = True
+    # Multi-page ADF: one scan job for the whole feeder. ImagesToTransfer 0 means "acquire until the feeder
+    # is empty" for ADF and a single image for Platen (Microsoft WS-Scan docs, ImagesToTransfer element). The
+    # images are then fetched with repeated RetrieveImage calls on the same job until the device answers
+    # ClientErrorNoImagesAvailable. Asking for one image per job and creating a new job for every page made
+    # an HP Color Laser MFP 179fnw feed every sheet while only the first page arrived.
+    adf = str(std_ticket.doc_params.input_src).startswith("ADF")
+    std_ticket.doc_params.images_num = 0 if adf else 1
 
     try:
-        while more_images_available:
-            try:
-                job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
-            except RuntimeError as e:
-                logger.error("CreateScanJob failed: %s", e)
-                break
-            except StopIteration:
-                logger.error("CreateScanJob: device did not respond. Aborting scan.")
-                break
+        try:
+            job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
+        except RuntimeError as e:
+            logger.error("CreateScanJob failed: %s", e)
+            job = None
+        except StopIteration:
+            logger.error("CreateScanJob: device did not respond. Aborting scan.")
+            job = None
 
+        while job is not None:
             try:
-                img = wsd_scan__operations.wsd_retrieve_image(host, job, file_name)
+                img = wsd_scan__operations.wsd_retrieve_image(host, job, "%s_%d" % (file_name, image_id))
             except Exception as e:
                 logger.error("RetrieveImage failed: %s", e)
                 break
 
+            if img is None:
+                logger.warning("RetrieveImage: unexpected answer from the device, stopping after %d image(s).",
+                               image_id)
+                break
             if img == Image.NONE:
-                more_images_available = False
                 break
 
             picture_file = "%s/%s_%d.%s" % (profile["target_folder"], file_name, image_id, save_format)
@@ -658,15 +667,14 @@ def _scan_worker(client_context, scan_identifier, file_name, input_source=None):
             picture_files.append(picture_file)
             image_id += 1
 
-            # Only check for more images if the ADF is used
-            if std_ticket.doc_params.input_src == "Platen":
-                more_images_available = False
+            if not adf:
+                break
 
         if picture_files and profile["use_pdf"]:
             pdf_file_name = "%s/%s.pdf" % (profile["target_folder"], file_name)
             with open(pdf_file_name, "wb") as f:
                 f.write(img2pdf.convert(picture_files))
-            logger.info("Saved PDF: %s", pdf_file_name)
+            logger.info("Saved PDF: %s (%d page(s))", pdf_file_name, len(picture_files))
             attachments = [pdf_file_name]
         else:
             attachments = picture_files
