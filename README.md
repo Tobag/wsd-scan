@@ -87,12 +87,18 @@ format: jfif               # WSD format string (device-dependent)
 image_format: jpeg         # PIL save format
 quality: 70                # 0-100, PIL save quality
 target_folder: ~/Pictures/scans  # output directory (~ and $HOME expanded)
+work_folder: /tmp/wsd-scan      # optional: page images go here, only the PDF lands in target_folder
 send_email: False          # send scanned document via SMTP
 use_pdf: True              # compile images into a PDF
 paper_size: A4             # A4, A5, Letter
 resolution: 300            # dpi
 input_src: Auto            # Auto, ADF, Platen
 ```
+
+With `work_folder` set, the page images are written there and removed once the PDF is
+complete; the PDF is written under a temporary name and renamed, so tools that watch
+`target_folder` (sync clients, document importers) never pick up a half-written file.
+Without `use_pdf`, the images are moved to `target_folder` when the scan is done.
 
 List loaded profiles:
 ```bash
@@ -169,6 +175,7 @@ Lexmark, Epson, OKI, Ricoh, Samsung, Xerox). Tested with:
 
 - HP Laser MFP 137fnw (original upstream)
 - Samsung M288x Series MFP
+- HP Color Laser MFP 179fnw (multi-page ADF, Renew)
 
 ## Dependencies
 

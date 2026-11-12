@@ -93,3 +93,25 @@ class TestMultiPage:
         device(pages=2)
         scan(monkeypatch, make_profile(tmp_path, use_pdf=False), "ADF")
         assert sorted(os.listdir(str(tmp_path))) == ["scan_0.jpeg", "scan_1.jpeg"]
+
+
+# --- work_folder
+
+
+class TestWorkFolder:
+    def test_only_the_pdf_lands_in_target_folder(self, monkeypatch, device, tmp_path):
+        device(pages=2)
+        target, work = tmp_path / "out", tmp_path / "work"
+        target.mkdir()
+        scan(monkeypatch, make_profile(target, work_folder=str(work)), "ADF")
+        assert os.listdir(str(target)) == ["scan.pdf"]  # no page images, no leftover .part file
+        assert os.listdir(str(work)) == []
+        assert pdf_pages(str(target / "scan.pdf")) == 2
+
+    def test_images_moved_without_pdf(self, monkeypatch, device, tmp_path):
+        device(pages=2)
+        target, work = tmp_path / "out", tmp_path / "work"
+        target.mkdir()
+        scan(monkeypatch, make_profile(target, work_folder=str(work), use_pdf=False), "ADF")
+        assert sorted(os.listdir(str(target))) == ["scan_0.jpeg", "scan_1.jpeg"]
+        assert os.listdir(str(work)) == []

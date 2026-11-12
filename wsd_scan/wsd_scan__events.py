@@ -4,7 +4,9 @@
 import copy
 import http.server
 import logging
+import os
 import queue
+import shutil
 import threading
 import typing
 from datetime import datetime, timedelta
@@ -625,6 +627,11 @@ def _scan_worker(client_context, scan_identifier, file_name, input_source=None):
         std_ticket.doc_params.input_src = "ADF"
 
     save_format = profile["image_format"]
+    # Optional work_folder: page images are written there and only the finished
+    # PDF lands in target_folder, written under a temporary name and renamed when complete.
+    target_folder = profile["target_folder"]
+    work_folder = profile.get("work_folder") or target_folder
+    os.makedirs(work_folder, exist_ok=True)
 
     image_id = 0
     picture_files = []
@@ -661,7 +668,7 @@ def _scan_worker(client_context, scan_identifier, file_name, input_source=None):
             if img == Image.NONE:
                 break
 
-            picture_file = "%s/%s_%d.%s" % (profile["target_folder"], file_name, image_id, save_format)
+            picture_file = "%s/%s_%d.%s" % (work_folder, file_name, image_id, save_format)
             img.save(picture_file, format=save_format, quality=profile["quality"])
             logger.info("Saved: %s", picture_file)
             picture_files.append(picture_file)
@@ -671,11 +678,25 @@ def _scan_worker(client_context, scan_identifier, file_name, input_source=None):
                 break
 
         if picture_files and profile["use_pdf"]:
-            pdf_file_name = "%s/%s.pdf" % (profile["target_folder"], file_name)
-            with open(pdf_file_name, "wb") as f:
+            pdf_file_name = "%s/%s.pdf" % (target_folder, file_name)
+            part_file_name = "%s/.%s.pdf.part" % (target_folder, file_name)
+            with open(part_file_name, "wb") as f:
                 f.write(img2pdf.convert(picture_files))
+            os.replace(part_file_name, pdf_file_name)
             logger.info("Saved PDF: %s (%d page(s))", pdf_file_name, len(picture_files))
             attachments = [pdf_file_name]
+            if work_folder != target_folder:
+                for p in picture_files:
+                    try:
+                        os.remove(p)
+                    except OSError as e:
+                        logger.warning("Could not remove %s: %s", p, e)
+        elif work_folder != target_folder:
+            attachments = []
+            for p in picture_files:
+                dest = os.path.join(target_folder, os.path.basename(p))
+                shutil.move(p, dest)
+                attachments.append(dest)
         else:
             attachments = picture_files
 
