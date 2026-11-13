@@ -4,7 +4,9 @@
 import copy
 import http.server
 import logging
+import os
 import queue
+import shutil
 import threading
 import typing
 from datetime import datetime, timedelta
@@ -27,6 +29,21 @@ logger = logging.getLogger("wsd_scan")
 token_map = {}
 host_map = {}
 profile_map = {}
+
+# Number of scan workers currently transferring images (cli waits for them before it exits to re-subscribe).
+_active_scans = 0
+_active_lock = threading.Lock()
+
+
+def active_scans():
+    with _active_lock:
+        return _active_scans
+
+
+def _count_scan(delta):
+    global _active_scans
+    with _active_lock:
+        _active_scans += delta
 
 
 def wsd_scanner_all_events_subscribe(hosted_scan_service: wsd_transfer__structures.HostedService,
@@ -586,6 +603,14 @@ def device_initiated_scan_worker(client_context: str,
     :param input_source: the input source from the ScanAvailableEvent (e.g. "Platen", "ADF")
     :type input_source: str
     """
+    _count_scan(1)
+    try:
+        _scan_worker(client_context, scan_identifier, file_name, input_source)
+    finally:
+        _count_scan(-1)
+
+
+def _scan_worker(client_context, scan_identifier, file_name, input_source=None):
     host = host_map[client_context]
     dest_token = token_map[client_context]
     profile = profile_map[client_context]
@@ -602,49 +627,76 @@ def device_initiated_scan_worker(client_context: str,
         std_ticket.doc_params.input_src = "ADF"
 
     save_format = profile["image_format"]
+    # Optional work_folder: page images are written there and only the finished
+    # PDF lands in target_folder, written under a temporary name and renamed when complete.
+    target_folder = profile["target_folder"]
+    work_folder = profile.get("work_folder") or target_folder
+    os.makedirs(work_folder, exist_ok=True)
 
     image_id = 0
     picture_files = []
 
-    more_images_available = True
+    # Multi-page ADF: one scan job for the whole feeder. ImagesToTransfer 0 means "acquire until the feeder
+    # is empty" for ADF and a single image for Platen (Microsoft WS-Scan docs, ImagesToTransfer element). The
+    # images are then fetched with repeated RetrieveImage calls on the same job until the device answers
+    # ClientErrorNoImagesAvailable. Asking for one image per job and creating a new job for every page made
+    # an HP Color Laser MFP 179fnw feed every sheet while only the first page arrived.
+    adf = str(std_ticket.doc_params.input_src).startswith("ADF")
+    std_ticket.doc_params.images_num = 0 if adf else 1
 
     try:
-        while more_images_available:
-            try:
-                job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
-            except RuntimeError as e:
-                logger.error("CreateScanJob failed: %s", e)
-                break
-            except StopIteration:
-                logger.error("CreateScanJob: device did not respond. Aborting scan.")
-                break
+        try:
+            job = wsd_scan__operations.wsd_create_scan_job(host, std_ticket, scan_identifier, dest_token)
+        except RuntimeError as e:
+            logger.error("CreateScanJob failed: %s", e)
+            job = None
+        except StopIteration:
+            logger.error("CreateScanJob: device did not respond. Aborting scan.")
+            job = None
 
+        while job is not None:
             try:
-                img = wsd_scan__operations.wsd_retrieve_image(host, job, file_name)
+                img = wsd_scan__operations.wsd_retrieve_image(host, job, "%s_%d" % (file_name, image_id))
             except Exception as e:
                 logger.error("RetrieveImage failed: %s", e)
                 break
 
+            if img is None:
+                logger.warning("RetrieveImage: unexpected answer from the device, stopping after %d image(s).",
+                               image_id)
+                break
             if img == Image.NONE:
-                more_images_available = False
                 break
 
-            picture_file = "%s/%s_%d.%s" % (profile["target_folder"], file_name, image_id, save_format)
+            picture_file = "%s/%s_%d.%s" % (work_folder, file_name, image_id, save_format)
             img.save(picture_file, format=save_format, quality=profile["quality"])
             logger.info("Saved: %s", picture_file)
             picture_files.append(picture_file)
             image_id += 1
 
-            # Only check for more images if the ADF is used
-            if std_ticket.doc_params.input_src == "Platen":
-                more_images_available = False
+            if not adf:
+                break
 
         if picture_files and profile["use_pdf"]:
-            pdf_file_name = "%s/%s.pdf" % (profile["target_folder"], file_name)
-            with open(pdf_file_name, "wb") as f:
+            pdf_file_name = "%s/%s.pdf" % (target_folder, file_name)
+            part_file_name = "%s/.%s.pdf.part" % (target_folder, file_name)
+            with open(part_file_name, "wb") as f:
                 f.write(img2pdf.convert(picture_files))
-            logger.info("Saved PDF: %s", pdf_file_name)
+            os.replace(part_file_name, pdf_file_name)
+            logger.info("Saved PDF: %s (%d page(s))", pdf_file_name, len(picture_files))
             attachments = [pdf_file_name]
+            if work_folder != target_folder:
+                for p in picture_files:
+                    try:
+                        os.remove(p)
+                    except OSError as e:
+                        logger.warning("Could not remove %s: %s", p, e)
+        elif work_folder != target_folder:
+            attachments = []
+            for p in picture_files:
+                dest = os.path.join(target_folder, os.path.basename(p))
+                shutil.move(p, dest)
+                attachments.append(dest)
         else:
             attachments = picture_files
 

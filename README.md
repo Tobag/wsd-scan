@@ -87,6 +87,7 @@ format: jfif               # WSD format string (device-dependent)
 image_format: jpeg         # PIL save format
 quality: 70                # 0-100, PIL save quality
 target_folder: ~/Pictures/scans  # output directory (~ and $HOME expanded)
+work_folder: /tmp/wsd-scan      # optional: page images go here, only the PDF lands in target_folder
 send_email: False          # send scanned document via SMTP
 use_pdf: True              # compile images into a PDF
 paper_size: A4             # A4, A5, Letter
@@ -94,10 +95,35 @@ resolution: 300            # dpi
 input_src: Auto            # Auto, ADF, Platen
 ```
 
+With `work_folder` set, the page images are written there and removed once the PDF is
+complete; the PDF is written under a temporary name and renamed, so tools that watch
+`target_folder` (sync clients, document importers) never pick up a half-written file.
+Without `use_pdf`, the images are moved to `target_folder` when the scan is done.
+
 List loaded profiles:
 ```bash
 wsd-scan list-profiles
 ```
+
+## Long-running service
+
+Devices grant the scan-available subscriptions (the panel entries) for one hour.
+`wsd-scan start` renews them with WS-Eventing Renew, so the entries stay on the
+panel. If the subscriptions are lost, for example because the printer was
+restarted, the process waits for running scans, unsubscribes and exits with a
+non-zero code; the service manager restarts it and it subscribes again. The
+bundled systemd unit (`Restart=on-failure`) and Docker's `--restart
+unless-stopped` both do that.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `WSD_SCAN_RENEW_S` | `300` | seconds between Renew requests |
+| `WSD_SCAN_RENEW_EXPIRES` | `PT1H` | expiry requested with each Renew |
+| `WSD_SCAN_RESUBSCRIBE_S` | `3300` | devices without Renew support: exit after this many seconds to re-subscribe before expiry |
+| `WSD_SCAN_WAIT_FOR_SCANS_S` | `300` | how long to wait for a running scan before exiting |
+
+Exit codes: `2` subscribe failed, `3` subscriptions lost, `4` planned
+re-subscribe (device without Renew support).
 
 ## Email delivery
 
@@ -149,6 +175,7 @@ Lexmark, Epson, OKI, Ricoh, Samsung, Xerox). Tested with:
 
 - HP Laser MFP 137fnw (original upstream)
 - Samsung M288x Series MFP
+- HP Color Laser MFP 179fnw (multi-page ADF, Renew)
 
 ## Dependencies
 
